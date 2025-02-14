@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Función auxiliar para verificar si el usuario está autenticado
+    function isAuth() {
+      return request.auth != null;
+    }
+    
+    // Función auxiliar para verificar si el usuario es admin
+    function isAdmin() {
+      return isAuth() && request.auth.token.admin == true;
+    }
+
+    // Reglas para la colección users
+    match /users/{userId} {
+      allow read: if isAuth() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // Reglas para módulos
+    match /modulos/{moduloId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // Reglas para materias
+    match /materias/{materiaId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+
+    // Reglas para estudiantes
+    match /estudiantes/{estudianteId} {
+      allow read: if isAuth();
+      allow write: if isAdmin();
+    }
+  }
+}

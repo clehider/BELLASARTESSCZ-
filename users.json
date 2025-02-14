@@ -1,0 +1,15 @@
+{
+  "users": [
+    {
+      "localId": "admin-user",
+      "email": "admin@bellasartes.com",
+      "passwordHash": "UkVEQUNURUQ=",
+      "salt": "redacted",
+      "displayName": "Administrador",
+      "emailVerified": true,
+      "customClaims": {
+        "admin": true
+      }
+    }
+  ]
+}
