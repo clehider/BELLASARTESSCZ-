@@ -88,11 +88,11 @@ const menuItems = [
 ];
 
 const Layout = ({ children }) => {
-  const [open, setOpen] = useState(true);
-  const [anchorEl, setAnchorEl] = useState(null);
-  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser, logout } = useAuth();
+  const [open, setOpen] = useState(location.pathname !== '/');
+  const [anchorEl, setAnchorEl] = useState(null);
 
   const handleDrawerOpen = () => {
     setOpen(true);

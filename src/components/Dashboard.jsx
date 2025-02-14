@@ -6,337 +6,261 @@ import {
   Typography,
   Box,
   CircularProgress,
-  Alert,
+  Button,
   Card,
   CardContent,
   IconButton,
-  Drawer,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  AppBar,
-  Toolbar,
-  Avatar,
+  Tooltip,
   Menu,
   MenuItem,
-  Divider
+  Avatar
 } from '@mui/material';
 import {
-  Menu as MenuIcon,
+  People as PeopleIcon,
   School as SchoolIcon,
   LibraryBooks as LibraryBooksIcon,
-  People as PeopleIcon,
-  Dashboard as DashboardIcon,
-  ExitToApp as ExitToAppIcon,
-  Settings as SettingsIcon,
-  Person as PersonIcon,
-  Notifications as NotificationsIcon
+  Download as DownloadIcon,
+  MoreVert as MoreVertIcon,
+  TrendingUp as TrendingUpIcon,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { ResponsivePie } from '@nivo/pie';
+import { ResponsiveBar } from '@nivo/bar';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { collection, getDocs, query, where } from 'firebase/firestore';
-import { styled } from '@mui/material/styles';
-
-// Estilos personalizados
-const drawerWidth = 240;
-
-const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })(
-  ({ theme, open }) => ({
-    flexGrow: 1,
-    padding: theme.spacing(3),
-    transition: theme.transitions.create('margin', {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.leavingScreen,
-    }),
-    marginLeft: `-${drawerWidth}px`,
-    ...(open && {
-      transition: theme.transitions.create('margin', {
-        easing: theme.transitions.easing.easeOut,
-        duration: theme.transitions.duration.enteringScreen,
-      }),
-      marginLeft: 0,
-    }),
-  }),
-);
-
-const StatsCard = ({ title, value, icon: Icon, color }) => (
-  <Card sx={{ height: '100%' }}>
-    <CardContent>
-      <Grid container spacing={3} alignItems="center">
-        <Grid item>
-          <Avatar sx={{ bgcolor: color, width: 56, height: 56 }}>
-            <Icon />
-          </Avatar>
-        </Grid>
-        <Grid item xs>
-          <Typography color="textSecondary" gutterBottom variant="overline">
-            {title}
-          </Typography>
-          <Typography variant="h4">{value}</Typography>
-        </Grid>
-      </Grid>
-    </CardContent>
-  </Card>
-);
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 const Dashboard = () => {
-  const { currentUser, logout } = useAuth();
-  const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    estudiantes: [],
+    modulos: [],
+    materias: []
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [data, setData] = useState({
-    modulos: [],
-    materias: [],
-    estudiantes: []
-  });
-  const [drawerOpen, setDrawerOpen] = useState(true);
-  const [anchorEl, setAnchorEl] = useState(null);
-
-  const handleDrawerToggle = () => {
-    setDrawerOpen(!drawerOpen);
-  };
-
-  const handleMenuClick = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (error) {
-      console.error('Error al cerrar sesión:', error);
-    }
-  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const collections = ['modulos', 'materias', 'estudiantes'];
-        const fetchedData = {};
-
-        for (const collectionName of collections) {
-          const querySnapshot = await getDocs(collection(db, collectionName));
-          fetchedData[collectionName] = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-          }));
-        }
-
-        setData(fetchedData);
-      } catch (error) {
-        console.error('Error al cargar datos:', error);
-        setError('Error al cargar los datos. Por favor, intente nuevamente.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
 
-  const menuItems = [
-    { text: 'Dashboard', icon: DashboardIcon, path: '/' },
-    { text: 'Módulos', icon: SchoolIcon, path: '/modulos' },
-    { text: 'Materias', icon: LibraryBooksIcon, path: '/materias' },
-    { text: 'Estudiantes', icon: PeopleIcon, path: '/estudiantes' },
-  ];
+  const fetchData = async () => {
+    try {
+      console.log("Iniciando fetchData");
+      setLoading(true);
+      const [estudiantesSnap, modulosSnap, materiasSnap] = await Promise.all([
+        getDocs(collection(db, 'estudiantes')),
+        getDocs(collection(db, 'modulos')),
+        getDocs(collection(db, 'materias'))
+      ]);
+
+      console.log("Datos obtenidos:", {
+        estudiantes: estudiantesSnap.docs.length,
+        modulos: modulosSnap.docs.length,
+        materias: materiasSnap.docs.length
+      });
+
+      setStats({
+        estudiantes: estudiantesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+        modulos: modulosSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+        materias: materiasSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+      });
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      setError('Error al cargar los datos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getEstudiantesPorModulo = () => {
+    const estudiantesPorModulo = stats.modulos.map(modulo => ({
+      id: modulo.nombre,
+      label: modulo.nombre,
+      value: stats.estudiantes.filter(e => e.moduloId === modulo.id).length
+    }));
+    return estudiantesPorModulo;
+  };
+
+  const getMateriasPorModulo = () => {
+    return stats.modulos.map(modulo => ({
+      modulo: modulo.nombre,
+      cantidad: stats.materias.filter(m => m.moduloId === modulo.id).length
+    }));
+  };
+
+  const generatePDF = () => {
+    const doc = new jsPDF();
+    
+    // Título
+    doc.setFontSize(18);
+    doc.text('Reporte Estadístico - Instituto Bellas Artes SCZ', 105, 20, { align: 'center' });
+    
+    // Fecha
+    doc.setFontSize(12);
+    doc.text(`Generado: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, 105, 30, { align: 'center' });
+
+    // Estadísticas Generales
+    const tableData = [
+      ['Categoría', 'Total', 'Activos'],
+      ['Estudiantes', stats.estudiantes.length, stats.estudiantes.filter(e => e.estado === 'activo').length],
+      ['Módulos', stats.modulos.length, stats.modulos.filter(m => m.estado === 'activo').length],
+      ['Materias', stats.materias.length, stats.materias.filter(m => m.estado === 'activo').length]
+    ];
+
+    doc.autoTable({
+      startY: 40,
+      head: [tableData[0]],
+      body: tableData.slice(1),
+    });
+
+    doc.save('reporte-estadistico.pdf');
+  };
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
         <CircularProgress />
       </Box>
     );
   }
 
+  if (error) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+        <Typography color="error">{error}</Typography>
+      </Box>
+    );
+  }
+
   return (
-    <Box sx={{ display: 'flex' }}>
-      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
-        <Toolbar>
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={handleDrawerToggle}
-            sx={{ mr: 2 }}
-          >
-            <MenuIcon />
-          </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Instituto de Bellas Artes SCZ
-          </Typography>
-          <IconButton color="inherit">
-            <NotificationsIcon />
-          </IconButton>
-          <IconButton color="inherit" onClick={handleMenuClick}>
-            <Avatar sx={{ bgcolor: 'secondary.main' }}>
-              {currentUser?.email?.charAt(0).toUpperCase()}
-            </Avatar>
-          </IconButton>
-          <Menu
-            anchorEl={anchorEl}
-            open={Boolean(anchorEl)}
-            onClose={handleMenuClose}
-          >
-            <MenuItem onClick={handleMenuClose}>
-              <ListItemIcon>
-                <PersonIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>Perfil</ListItemText>
-            </MenuItem>
-            <MenuItem onClick={handleMenuClose}>
-              <ListItemIcon>
-                <SettingsIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>Configuración</ListItemText>
-            </MenuItem>
-            <Divider />
-            <MenuItem onClick={handleLogout}>
-              <ListItemIcon>
-                <ExitToAppIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>Cerrar Sesión</ListItemText>
-            </MenuItem>
-          </Menu>
-        </Toolbar>
-      </AppBar>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Grid container spacing={3}>
+        {/* Tarjetas de estadísticas */}
+        <Grid item xs={12} sm={6} md={4}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography color="textSecondary" gutterBottom>
+                    Estudiantes
+                  </Typography>
+                  <Typography variant="h4">
+                    {stats.estudiantes.length}
+                  </Typography>
+                </Box>
+                <Avatar sx={{ bgcolor: 'primary.main' }}>
+                  <PeopleIcon />
+                </Avatar>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
 
-      <Drawer
-        variant="persistent"
-        anchor="left"
-        open={drawerOpen}
-        sx={{
-          width: drawerWidth,
-          flexShrink: 0,
-          '& .MuiDrawer-paper': {
-            width: drawerWidth,
-            boxSizing: 'border-box',
-          },
-        }}
-      >
-        <Toolbar />
-        <Box sx={{ overflow: 'auto' }}>
-          <List>
-            {menuItems.map((item) => (
-              <ListItem
-                button
-                key={item.text}
-                onClick={() => navigate(item.path)}
-              >
-                <ListItemIcon>
-                  <item.icon />
-                </ListItemIcon>
-                <ListItemText primary={item.text} />
-              </ListItem>
-            ))}
-          </List>
-        </Box>
-      </Drawer>
+        <Grid item xs={12} sm={6} md={4}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography color="textSecondary" gutterBottom>
+                    Módulos
+                  </Typography>
+                  <Typography variant="h4">
+                    {stats.modulos.length}
+                  </Typography>
+                </Box>
+                <Avatar sx={{ bgcolor: 'secondary.main' }}>
+                  <SchoolIcon />
+                </Avatar>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
 
-      <Main open={drawerOpen}>
-        <Toolbar />
-        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
+        <Grid item xs={12} sm={6} md={4}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography color="textSecondary" gutterBottom>
+                    Materias
+                  </Typography>
+                  <Typography variant="h4">
+                    {stats.materias.length}
+                  </Typography>
+                </Box>
+                <Avatar sx={{ bgcolor: 'warning.main' }}>
+                  <LibraryBooksIcon />
+                </Avatar>
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
 
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={6} md={3}>
-              <StatsCard
-                title="Total Módulos"
-                value={data.modulos.length}
-                icon={SchoolIcon}
-                color="#1976d2"
+        {/* Gráficos */}
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2, height: 400 }}>
+            <Typography variant="h6" gutterBottom>
+              Estudiantes por Módulo
+            </Typography>
+            <Box height={300}>
+              <ResponsivePie
+                data={getEstudiantesPorModulo()}
+                margin={{ top: 40, right: 80, bottom: 80, left: 80 }}
+                innerRadius={0.5}
+                padAngle={0.7}
+                cornerRadius={3}
+                colors={{ scheme: 'nivo' }}
+                borderWidth={1}
+                borderColor={{ from: 'color', modifiers: [['darker', 0.2]] }}
+                enableArcLinkLabels={true}
+                arcLinkLabelsSkipAngle={10}
+                arcLinkLabelsTextColor="#333333"
+                arcLabelsSkipAngle={10}
               />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <StatsCard
-                title="Total Materias"
-                value={data.materias.length}
-                icon={LibraryBooksIcon}
-                color="#2e7d32"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <StatsCard
-                title="Total Estudiantes"
-                value={data.estudiantes.length}
-                icon={PeopleIcon}
-                color="#ed6c02"
-              />
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <StatsCard
-                title="Usuarios Activos"
-                value={data.estudiantes.filter(e => e.estado === 'activo').length}
-                icon={PersonIcon}
-                color="#9c27b0"
-              />
-            </Grid>
+            </Box>
+          </Paper>
+        </Grid>
 
-            {/* Sección de Módulos */}
-            <Grid item xs={12}>
-              <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-                <Typography component="h2" variant="h6" color="primary" gutterBottom>
-                  Módulos Activos
-                </Typography>
-                <Grid container spacing={2}>
-                  {data.modulos.map((modulo) => (
-                    <Grid item xs={12} sm={6} md={4} key={modulo.id}>
-                      <Card>
-                        <CardContent>
-                          <Typography variant="h6">{modulo.nombre}</Typography>
-                          <Typography color="textSecondary">
-                            {modulo.descripcion}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              </Paper>
-            </Grid>
+        <Grid item xs={12} md={6}>
+          <Paper sx={{ p: 2, height: 400 }}>
+            <Typography variant="h6" gutterBottom>
+              Materias por Módulo
+            </Typography>
+            <Box height={300}>
+              <ResponsiveBar
+                data={getMateriasPorModulo()}
+                keys={['cantidad']}
+                indexBy="modulo"
+                margin={{ top: 50, right: 130, bottom: 50, left: 60 }}
+                padding={0.3}
+                valueScale={{ type: 'linear' }}
+                colors={{ scheme: 'nivo' }}
+                borderColor={{ from: 'color', modifiers: [['darker', 1.6]] }}
+                axisTop={null}
+                axisRight={null}
+                labelSkipWidth={12}
+                labelSkipHeight={12}
+              />
+            </Box>
+          </Paper>
+        </Grid>
 
-            {/* Sección de Materias */}
-            <Grid item xs={12}>
-              <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-                <Typography component="h2" variant="h6" color="primary" gutterBottom>
-                  Materias Recientes
-                </Typography>
-                <Grid container spacing={2}>
-                  {data.materias.map((materia) => (
-                    <Grid item xs={12} sm={6} md={4} key={materia.id}>
-                      <Card>
-                        <CardContent>
-                          <Typography variant="h6">{materia.nombre}</Typography>
-                          <Typography color="textSecondary">
-                            {materia.descripcion}
-                          </Typography>
-                          <Typography variant="body2">
-                            Créditos: {materia.creditos}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              </Paper>
-            </Grid>
-          </Grid>
-        </Container>
-      </Main>
-    </Box>
+        {/* Botón de Descarga */}
+        <Grid item xs={12}>
+          <Box display="flex" justifyContent="flex-end" mt={2}>
+            <Button
+              variant="contained"
+              startIcon={<DownloadIcon />}
+              onClick={generatePDF}
+            >
+              Descargar Reporte
+            </Button>
+          </Box>
+        </Grid>
+      </Grid>
+    </Container>
   );
 };
 
