@@ -4,13 +4,19 @@ import { AuthProvider } from './contexts/AuthContext';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
-import ProfesorPanel from './pages/ProfesorPanel';
+import Materias from './pages/Materias';
+import Estudiantes from './pages/Estudiantes';
+import Profesores from './pages/Profesores';
+import Calificaciones from './pages/Calificaciones';
 import NavBar from './components/NavBar';
 import { setupUsers } from './utils/setupUsers';
+import { setupModules } from './utils/setupModules';
 
 function App() {
   useEffect(() => {
+    // Configurar usuarios y módulos al iniciar la app
     setupUsers();
+    setupModules();
   }, []);
 
   return (
@@ -38,10 +44,34 @@ function App() {
                 }
               />
               <Route
-                path="/profesor"
+                path="/materias"
                 element={
                   <PrivateRoute>
-                    <ProfesorPanel />
+                    <Materias />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/estudiantes"
+                element={
+                  <PrivateRoute>
+                    <Estudiantes />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/profesores"
+                element={
+                  <PrivateRoute>
+                    <Profesores />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/calificaciones"
+                element={
+                  <PrivateRoute>
+                    <Calificaciones />
                   </PrivateRoute>
                 }
               />
