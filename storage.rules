@@ -1,16 +1,36 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /receipts/{allPaths=**} {
+    match /{allPaths=**} {
       allow read: if request.auth != null;
       allow write: if request.auth != null 
-        && request.resource.size < 5 * 1024 * 1024 
-        && request.resource.contentType.matches('image/.*|application/pdf');
+        && (request.resource.size < 5 * 1024 * 1024) // 5MB max file size
+        && request.resource.contentType.matches('image/.*') // Solo imágenes
+        || request.resource.contentType.matches('application/pdf'); // y PDFs
     }
-    
-    match /profiles/{userId}/{allPaths=**} {
+
+    // Reglas específicas para perfiles de usuarios
+    match /usuarios/{userId}/profile/{fileName} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Reglas para materiales de curso
+    match /materias/{materiaId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        (request.auth.token.admin == true || 
+         exists(/databases/$(database)/documents/profesores/$(request.auth.uid)));
+    }
+
+    // Reglas para tareas de estudiantes
+    match /tareas/{estudianteId}/{fileName} {
+      allow read: if request.auth != null && 
+        (request.auth.uid == estudianteId || 
+         exists(/databases/$(database)/documents/profesores/$(request.auth.uid)) ||
+         request.auth.token.admin == true);
+      allow write: if request.auth != null && 
+        (request.auth.uid == estudianteId || request.auth.token.admin == true);
     }
   }
 }

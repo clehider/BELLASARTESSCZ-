@@ -1,9 +1,8 @@
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getDatabase } from "firebase/database";
+import { getFirestore } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
+import { getDatabase } from 'firebase/database';
 
-// Tu configuración actual de Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyB08Ss_5HwpRWU2Ag2k3Nxc2JgIutrXqDg",
   authDomain: "institutogestion-80e6b.firebaseapp.com",
@@ -17,10 +16,9 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firebase services
-const auth = getAuth(app);
+// Initialize services
 const db = getFirestore(app);
+const auth = getAuth(app);
 const rtdb = getDatabase(app);
 
-export { auth, db, rtdb };
-export default app;
+export { db, auth, rtdb };

@@ -1,6 +1,55 @@
 {
   "rules": {
     ".read": "auth != null",
-    ".write": "auth != null"
+    ".write": "auth != null",
+    "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid || root.child('admins').child(auth.uid).exists()",
+        ".write": "$uid === auth.uid || root.child('admins').child(auth.uid).exists()"
+      }
+    },
+    "estudiantes": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()",
+      "$estudianteId": {
+        "notas": {
+          ".read": "$estudianteId === auth.uid || root.child('profesores').child(auth.uid).exists() || root.child('admins').child(auth.uid).exists()",
+          ".write": "root.child('profesores').child(auth.uid).exists() || root.child('admins').child(auth.uid).exists()"
+        }
+      }
+    },
+    "profesores": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()",
+      "$profesorId": {
+        "materias": {
+          ".read": "$profesorId === auth.uid || root.child('admins').child(auth.uid).exists()",
+          ".write": "$profesorId === auth.uid || root.child('admins').child(auth.uid).exists()"
+        }
+      }
+    },
+    "modulos": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+    },
+    "materias": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('profesores').child(auth.uid).exists() || root.child('admins').child(auth.uid).exists())"
+    },
+    "notas": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('profesores').child(auth.uid).exists() || root.child('admins').child(auth.uid).exists())"
+    },
+    "ausencias": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$ausenciaId": {
+        ".validate": "newData.hasChildren(['estudianteId', 'fecha', 'motivo', 'estado'])"
+      }
+    },
+    "admins": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).exists()",
+      ".write": "auth != null && root.child('admins').child(auth.uid).exists()"
+    }
   }
 }

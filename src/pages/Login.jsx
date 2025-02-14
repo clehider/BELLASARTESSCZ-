@@ -1,73 +1,59 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Button,
-  TextField,
-  Typography,
   Container,
-  Alert,
   Paper,
-  CircularProgress,
-  Divider
+  TextField,
+  Button,
+  Typography,
+  Box,
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
-import { useNavigate, Navigate } from 'react-router-dom';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebase/config';
 
 const Login = () => {
-  const [email, setEmail] = useState('admin@bellasartes.com');
-  const [password, setPassword] = useState('Admin123!');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login, currentUser } = useAuth();
   const navigate = useNavigate();
-
-  if (currentUser) {
-    console.log('Usuario ya autenticado, redirigiendo...');
-    return <Navigate to="/" replace />;
-  }
+  const { login } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Iniciando intento de login...');
-    
-    if (!email || !password) {
-      setError('Por favor ingrese email y contraseña');
-      return;
-    }
+    setError('');
+    setLoading(true);
 
     try {
-      setError('');
-      setLoading(true);
-      console.log('Intentando login con:', email);
-      const result = await login(email, password);
-      console.log('Login exitoso:', result);
-      navigate('/', { replace: true });
-    } catch (err) {
-      console.error('Error detallado:', err);
-      let errorMessage = 'Error al iniciar sesión. ';
+      console.log('Intentando iniciar sesión con:', email);
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('Login exitoso:', userCredential.user);
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error en login:', error);
+      let errorMessage = 'Ocurrió un error al iniciar sesión.';
       
-      switch (err.code) {
-        case 'auth/user-not-found':
-          errorMessage = 'Usuario no encontrado. Verifique el correo electrónico.';
-          break;
-        case 'auth/wrong-password':
-          errorMessage = 'Contraseña incorrecta. Intente nuevamente.';
-          break;
+      switch (error.code) {
         case 'auth/invalid-email':
-          errorMessage = 'Formato de correo electrónico inválido.';
+          errorMessage = 'El correo electrónico no es válido.';
           break;
         case 'auth/user-disabled':
           errorMessage = 'Esta cuenta ha sido deshabilitada.';
           break;
-        case 'auth/too-many-requests':
-          errorMessage = 'Demasiados intentos fallidos. Por favor, espere unos minutos.';
+        case 'auth/user-not-found':
+          errorMessage = 'No existe una cuenta con este correo electrónico.';
+          break;
+        case 'auth/wrong-password':
+          errorMessage = 'Contraseña incorrecta.';
           break;
         default:
-          errorMessage = `Error: ${err.message}`;
+          errorMessage = 'Credenciales inválidas. Por favor, verifique su correo y contraseña.';
       }
       
       setError(errorMessage);
-      console.error('Mensaje de error mostrado:', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -83,27 +69,19 @@ const Login = () => {
           alignItems: 'center',
         }}
       >
-        <Paper 
-          elevation={3} 
-          sx={{ 
-            p: 4, 
-            width: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center'
-          }}
-        >
-          <Typography component="h1" variant="h5" gutterBottom>
-            Bellas Artes SCZ
+        <Paper elevation={3} sx={{ p: 4, width: '100%' }}>
+          <Typography component="h1" variant="h5" align="center" gutterBottom>
+            Instituto de Bellas Artes
           </Typography>
-          
+          <Typography component="h2" variant="h6" align="center" gutterBottom>
+            Iniciar Sesión
+          </Typography>
           {error && (
-            <Alert severity="error" sx={{ mb: 2, width: '100%' }}>
+            <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
           )}
-
-          <Box component="form" onSubmit={handleSubmit} noValidate sx={{ mt: 1, width: '100%' }}>
+          <Box component="form" onSubmit={handleSubmit} noValidate>
             <TextField
               margin="normal"
               required
@@ -137,20 +115,8 @@ const Login = () => {
               sx={{ mt: 3, mb: 2 }}
               disabled={loading}
             >
-              {loading ? <CircularProgress size={24} /> : 'Ingresar'}
+              {loading ? <CircularProgress size={24} /> : 'Iniciar Sesión'}
             </Button>
-
-            <Alert severity="info" sx={{ mt: 2 }}>
-              <Typography variant="body2">
-                Por favor, verifique que:
-                <br />
-                1. El usuario está creado en Firebase Authentication
-                <br />
-                2. La contraseña tiene al menos 6 caracteres
-                <br />
-                3. El correo tiene formato válido
-              </Typography>
-            </Alert>
           </Box>
         </Paper>
       </Box>

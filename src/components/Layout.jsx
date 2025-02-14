@@ -1,112 +1,55 @@
 import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   CssBaseline,
-  Drawer,
   AppBar,
   Toolbar,
-  List,
   Typography,
-  Divider,
-  IconButton,
+  Drawer,
+  List,
   ListItem,
   ListItemIcon,
   ListItemText,
+  IconButton,
   Menu,
   MenuItem,
-  Avatar,
-  Badge,
-  Tooltip
+  Divider,
+  useTheme,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
   ChevronLeft as ChevronLeftIcon,
   Dashboard as DashboardIcon,
   School as SchoolIcon,
-  LibraryBooks as LibraryBooksIcon,
-  People as PeopleIcon,
-  Notifications as NotificationsIcon,
-  Settings as SettingsIcon,
-  ExitToApp as ExitToAppIcon,
-  AccountCircle as AccountCircleIcon
+  Person as PersonIcon,
+  Book as BookIcon,
+  AccountCircle as AccountCircleIcon,
+  ViewModule as ModuleIcon,
+  Assignment as AssignmentIcon,
+  Group as GroupIcon,
 } from '@mui/icons-material';
-import { styled } from '@mui/material/styles';
-import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const drawerWidth = 240;
 
-const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })(
-  ({ theme, open }) => ({
-    flexGrow: 1,
-    padding: theme.spacing(3),
-    transition: theme.transitions.create('margin', {
-      easing: theme.transitions.easing.sharp,
-      duration: theme.transitions.duration.leavingScreen,
-    }),
-    marginLeft: `-${drawerWidth}px`,
-    ...(open && {
-      transition: theme.transitions.create('margin', {
-        easing: theme.transitions.easing.easeOut,
-        duration: theme.transitions.duration.enteringScreen,
-      }),
-      marginLeft: 0,
-    }),
-  }),
-);
-
-const AppBarStyled = styled(AppBar, {
-  shouldForwardProp: (prop) => prop !== 'open',
-})(({ theme, open }) => ({
-  transition: theme.transitions.create(['margin', 'width'], {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  ...(open && {
-    width: `calc(100% - ${drawerWidth}px)`,
-    marginLeft: `${drawerWidth}px`,
-    transition: theme.transitions.create(['margin', 'width'], {
-      easing: theme.transitions.easing.easeOut,
-      duration: theme.transitions.duration.enteringScreen,
-    }),
-  }),
-}));
-
-const DrawerHeader = styled('div')(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  padding: theme.spacing(0, 1),
-  ...theme.mixins.toolbar,
-  justifyContent: 'flex-end',
-}));
-
-const menuItems = [
-  { text: 'Dashboard', icon: DashboardIcon, path: '/' },
-  { text: 'Módulos', icon: SchoolIcon, path: '/modulos' },
-  { text: 'Materias', icon: LibraryBooksIcon, path: '/materias' },
-  { text: 'Estudiantes', icon: PeopleIcon, path: '/estudiantes' }
-];
-
 const Layout = ({ children }) => {
+  const theme = useTheme();
+  const { logout, userRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser, logout } = useAuth();
-  const [open, setOpen] = useState(location.pathname !== '/');
+  const [open, setOpen] = useState(true);
   const [anchorEl, setAnchorEl] = useState(null);
 
-  const handleDrawerOpen = () => {
-    setOpen(true);
+  const handleDrawerToggle = () => {
+    setOpen(!open);
   };
 
-  const handleDrawerClose = () => {
-    setOpen(false);
-  };
-
-  const handleMenuClick = (event) => {
+  const handleMenu = (event) => {
     setAnchorEl(event.currentTarget);
   };
 
-  const handleMenuClose = () => {
+  const handleClose = () => {
     setAnchorEl(null);
   };
 
@@ -119,112 +62,146 @@ const Layout = ({ children }) => {
     }
   };
 
+  const menuItems = [
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/', roles: ['admin', 'profesor', 'estudiante'] },
+    { text: 'Estudiantes', icon: <PersonIcon />, path: '/estudiantes', roles: ['admin', 'profesor'] },
+    { text: 'Profesores', icon: <SchoolIcon />, path: '/profesores', roles: ['admin'] },
+    { text: 'Materias', icon: <BookIcon />, path: '/materias', roles: ['admin', 'profesor'] },
+    { text: 'Módulos', icon: <ModuleIcon />, path: '/modulos', roles: ['admin', 'profesor'] },
+    { text: 'Calificaciones', icon: <AssignmentIcon />, path: '/calificaciones', roles: ['admin', 'profesor', 'estudiante'] },
+    { text: 'Asistencia', icon: <GroupIcon />, path: '/asistencia', roles: ['admin', 'profesor'] },
+  ];
+
   return (
     <Box sx={{ display: 'flex' }}>
       <CssBaseline />
-      <AppBarStyled position="fixed" open={open}>
+      <AppBar
+        position="fixed"
+        sx={{
+          zIndex: theme.zIndex.drawer + 1,
+          transition: theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.leavingScreen,
+          }),
+          ...(open && {
+            marginLeft: drawerWidth,
+            width: `calc(100% - ${drawerWidth}px)`,
+            transition: theme.transitions.create(['width', 'margin'], {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.enteringScreen,
+            }),
+          }),
+        }}
+      >
         <Toolbar>
           <IconButton
             color="inherit"
-            aria-label="open drawer"
-            onClick={handleDrawerOpen}
+            onClick={handleDrawerToggle}
             edge="start"
-            sx={{ mr: 2, ...(open && { display: 'none' }) }}
+            sx={{ marginRight: 5 }}
           >
-            <MenuIcon />
+            {open ? <ChevronLeftIcon /> : <MenuIcon />}
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            Instituto de Bellas Artes SCZ
+            Instituto de Bellas Artes
           </Typography>
-          <IconButton color="inherit">
-            <Badge badgeContent={4} color="error">
-              <NotificationsIcon />
-            </Badge>
-          </IconButton>
-          <Tooltip title="Cuenta">
+          <div>
             <IconButton
-              onClick={handleMenuClick}
-              size="small"
-              sx={{ ml: 2 }}
-              aria-controls={Boolean(anchorEl) ? 'account-menu' : undefined}
-              aria-haspopup="true"
-              aria-expanded={Boolean(anchorEl) ? 'true' : undefined}
+              size="large"
+              onClick={handleMenu}
+              color="inherit"
             >
-              <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
-                {currentUser?.email?.charAt(0).toUpperCase()}
-              </Avatar>
+              <AccountCircleIcon />
             </IconButton>
-          </Tooltip>
+            <Menu
+              anchorEl={anchorEl}
+              anchorOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              keepMounted
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              open={Boolean(anchorEl)}
+              onClose={handleClose}
+            >
+              <MenuItem onClick={handleLogout}>Cerrar Sesión</MenuItem>
+            </Menu>
+          </div>
         </Toolbar>
-      </AppBarStyled>
+      </AppBar>
       <Drawer
+        variant="permanent"
+        open={open}
         sx={{
           width: drawerWidth,
           flexShrink: 0,
           '& .MuiDrawer-paper': {
             width: drawerWidth,
             boxSizing: 'border-box',
+            whiteSpace: 'nowrap',
+            transition: theme.transitions.create('width', {
+              easing: theme.transitions.easing.sharp,
+              duration: theme.transitions.duration.enteringScreen,
+            }),
+            ...(!open && {
+              width: theme.spacing(7),
+              overflowX: 'hidden',
+              transition: theme.transitions.create('width', {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.leavingScreen,
+              }),
+            }),
           },
         }}
-        variant="persistent"
-        anchor="left"
-        open={open}
       >
-        <DrawerHeader>
-          <IconButton onClick={handleDrawerClose}>
-            <ChevronLeftIcon />
-          </IconButton>
-        </DrawerHeader>
+        <Toolbar />
         <Divider />
         <List>
-          {menuItems.map((item) => (
-            <ListItem
-              button
-              key={item.text}
-              onClick={() => navigate(item.path)}
-              selected={location.pathname === item.path}
-            >
-              <ListItemIcon>
-                <item.icon color={location.pathname === item.path ? 'primary' : 'inherit'} />
-              </ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItem>
-          ))}
+          {menuItems
+            .filter(item => item.roles.includes(userRole))
+            .map((item) => (
+              <ListItem
+                button
+                key={item.text}
+                onClick={() => navigate(item.path)}
+                selected={location.pathname === item.path}
+                sx={{
+                  minHeight: 48,
+                  justifyContent: open ? 'initial' : 'center',
+                  px: 2.5,
+                }}
+              >
+                <ListItemIcon
+                  sx={{
+                    minWidth: 0,
+                    mr: open ? 3 : 'auto',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={item.text} 
+                  sx={{ opacity: open ? 1 : 0 }}
+                />
+              </ListItem>
+            ))}
         </List>
       </Drawer>
-      <Menu
-        anchorEl={anchorEl}
-        id="account-menu"
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-        onClick={handleMenuClose}
-        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          p: 3,
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          mt: '64px'
+        }}
       >
-        <MenuItem onClick={() => navigate('/profile')}>
-          <ListItemIcon>
-            <AccountCircleIcon fontSize="small" />
-          </ListItemIcon>
-          Perfil
-        </MenuItem>
-        <MenuItem onClick={() => navigate('/settings')}>
-          <ListItemIcon>
-            <SettingsIcon fontSize="small" />
-          </ListItemIcon>
-          Configuración
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={handleLogout}>
-          <ListItemIcon>
-            <ExitToAppIcon fontSize="small" />
-          </ListItemIcon>
-          Cerrar Sesión
-        </MenuItem>
-      </Menu>
-      <Main open={open}>
-        <DrawerHeader />
         {children}
-      </Main>
+      </Box>
     </Box>
   );
 };

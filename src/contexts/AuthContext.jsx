@@ -1,10 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { auth, db } from '../firebase/config';
-import { 
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged 
-} from 'firebase/auth';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { auth } from '../firebase/config';
+import { db } from '../firebase/config';
 import { doc, getDoc } from 'firebase/firestore';
 
 const AuthContext = createContext();
@@ -15,61 +11,30 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  async function login(email, password) {
-    try {
-      console.log('AuthContext: Iniciando login con:', email);
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log('AuthContext: Login exitoso, obteniendo token...');
-      
-      // Forzar actualización del token
-      await userCredential.user.getIdToken(true);
-      
-      // Obtener claims actualizados
-      const idTokenResult = await userCredential.user.getIdTokenResult();
-      console.log('AuthContext: Claims del usuario:', idTokenResult.claims);
-
-      // Verificar documento en Firestore
-      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
-      if (!userDoc.exists()) {
-        console.error('AuthContext: No se encontró el documento del usuario en Firestore');
-        throw new Error('Usuario no configurado correctamente');
-      }
-
-      console.log('AuthContext: Login completado exitosamente');
-      return userCredential;
-    } catch (error) {
-      console.error('AuthContext: Error en login:', error);
-      throw error;
-    }
-  }
-
-  async function logout() {
-    try {
-      await signOut(auth);
-      setCurrentUser(null);
-      console.log('AuthContext: Logout exitoso');
-    } catch (error) {
-      console.error('AuthContext: Error en logout:', error);
-      throw error;
-    }
-  }
 
   useEffect(() => {
-    console.log('AuthContext: Configurando listener de auth state');
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      console.log('AuthContext: Auth state changed:', user ? user.email : 'No user');
+    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+      setCurrentUser(user);
       if (user) {
         try {
-          const idTokenResult = await user.getIdTokenResult();
-          console.log('AuthContext: Claims actualizados:', idTokenResult.claims);
+          // Obtener el rol del usuario
+          const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
+          if (userDoc.exists()) {
+            console.log('Rol del usuario encontrado:', userDoc.data().rol);
+            setUserRole(userDoc.data().rol);
+          } else {
+            console.log('No se encontró el documento del usuario');
+            setUserRole(null);
+          }
         } catch (error) {
-          console.error('AuthContext: Error al obtener claims:', error);
+          console.error('Error al obtener el rol:', error);
+          setUserRole(null);
         }
+      } else {
+        setUserRole(null);
       }
-      setCurrentUser(user);
       setLoading(false);
     });
 
@@ -78,10 +43,8 @@ export function AuthProvider({ children }) {
 
   const value = {
     currentUser,
-    login,
-    logout,
-    loading,
-    error
+    userRole,
+    loading
   };
 
   return (
@@ -90,5 +53,3 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
-
-export default AuthContext;
