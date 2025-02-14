@@ -1,4 +1,5 @@
 import React from 'react';
+import EstudiantesPage from './components/EstudiantesPage';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -30,6 +31,7 @@ function App() {
       <Router>
         <AuthProvider>
           <Routes>
+            <Route path="/estudiantes" element={<PrivateRoute><EstudiantesPage /></PrivateRoute>} />
             <Route path="/login" element={<Login />} />
             <Route path="/" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
             <Route path="/modulos" element={<PrivateRoute><ModulosPage /></PrivateRoute>} />
