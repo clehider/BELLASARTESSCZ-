@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Grid,
@@ -20,68 +20,87 @@ import {
   IconButton,
   Snackbar,
   Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Chip
+  CircularProgress,
+  Chip,
+  Stack,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  School as SchoolIcon
+  Class as ClassIcon,
 } from '@mui/icons-material';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db, auth } from '../firebase/config';
-import { useAuth } from '../contexts/AuthContext';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase/config';
+import SeleccionarMateriasModal from '../components/SeleccionarMateriasModal';
 
 const Profesores = () => {
   const [profesores, setProfesores] = useState([]);
+  const [materias, setMaterias] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
   const [open, setOpen] = useState(false);
+  const [openMateriasModal, setOpenMateriasModal] = useState(false);
   const [editando, setEditando] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const { currentUser } = useAuth();
   const [formData, setFormData] = useState({
     nombre: '',
     apellidos: '',
     ci: '',
-    email: '',
-    telefono: '',
     especialidad: '',
-    titulo: '',
-    materias: [],
-    estado: 'Activo',
-    fechaIngreso: '',
-    direccion: ''
+    materias: []
   });
 
-  useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(user => {
-      if (user) {
-        console.log('Usuario autenticado:', user.uid);
-        fetchProfesores();
-      } else {
-        console.log('No hay usuario autenticado');
-        mostrarSnackbar('Por favor, inicia sesión para continuar', 'warning');
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const fetchProfesores = async () => {
+  const fetchMaterias = useCallback(async () => {
     try {
-      const profesoresSnapshot = await getDocs(collection(db, 'profesores'));
-      const profesoresData = profesoresSnapshot.docs.map(doc => ({
+      const materiasSnapshot = await getDocs(collection(db, 'materias'));
+      const materiasData = materiasSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
+      setMaterias(materiasData);
+      return materiasData;
+    } catch (error) {
+      console.error('Error al cargar materias:', error);
+      mostrarSnackbar('Error al cargar las materias', 'error');
+      return [];
+    }
+  }, []);
+
+  const fetchProfesores = useCallback(async (materiasData) => {
+    setLoadingData(true);
+    try {
+      const profesoresSnapshot = await getDocs(collection(db, 'profesores'));
+      const profesoresData = profesoresSnapshot.docs.map(doc => {
+        const profesor = { id: doc.id, ...doc.data() };
+        // Asignar los datos de las materias
+        if (profesor.materias && profesor.materias.length > 0) {
+          profesor.materiasData = profesor.materias.map(materiaId => 
+            materiasData.find(m => m.id === materiaId)
+          ).filter(Boolean);
+        }
+        return profesor;
+      });
       setProfesores(profesoresData);
     } catch (error) {
       console.error('Error al cargar profesores:', error);
       mostrarSnackbar('Error al cargar los profesores', 'error');
+    } finally {
+      setLoadingData(false);
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const inicializarDatos = async () => {
+      const materiasData = await fetchMaterias();
+      await fetchProfesores(materiasData);
+    };
+    inicializarDatos();
+  }, [fetchMaterias, fetchProfesores]);
+
+  const mostrarSnackbar = (mensaje, severidad) => {
+    setSnackbar({ open: true, message: mensaje, severity: severidad });
   };
 
   const handleClickOpen = () => {
@@ -90,14 +109,8 @@ const Profesores = () => {
       nombre: '',
       apellidos: '',
       ci: '',
-      email: '',
-      telefono: '',
       especialidad: '',
-      titulo: '',
-      materias: [],
-      estado: 'Activo',
-      fechaIngreso: '',
-      direccion: ''
+      materias: []
     });
     setOpen(true);
   };
@@ -113,83 +126,85 @@ const Profesores = () => {
       nombre: profesor.nombre || '',
       apellidos: profesor.apellidos || '',
       ci: profesor.ci || '',
-      email: profesor.email || '',
-      telefono: profesor.telefono || '',
       especialidad: profesor.especialidad || '',
-      titulo: profesor.titulo || '',
-      materias: profesor.materias || [],
-      estado: profesor.estado || 'Activo',
-      fechaIngreso: profesor.fechaIngreso || '',
-      direccion: profesor.direccion || ''
+      materias: profesor.materias || []
     });
     setOpen(true);
   };
 
-  const mostrarSnackbar = (mensaje, severidad) => {
-    setSnackbar({ open: true, message: mensaje, severity: severidad });
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoadingData(true);
     try {
-      if (!auth.currentUser) {
-        console.error('No hay usuario autenticado');
-        mostrarSnackbar('Por favor, inicia sesión nuevamente', 'error');
-        return;
-      }
-
-      console.log('Usuario actual:', auth.currentUser.uid);
-      
-      const datosAGuardar = {
-        ...formData,
-        fechaCreacion: new Date().toISOString(),
-        creadoPor: auth.currentUser.uid,
-        ultimaActualizacion: new Date().toISOString()
+      const profesorData = {
+        nombre: formData.nombre,
+        apellidos: formData.apellidos,
+        ci: formData.ci,
+        especialidad: formData.especialidad,
+        materias: formData.materias,
+        fechaActualizacion: new Date().toISOString()
       };
 
       if (editando) {
-        const profesorRef = doc(db, 'profesores', editando);
-        await updateDoc(profesorRef, datosAGuardar);
+        await updateDoc(doc(db, 'profesores', editando), profesorData);
         mostrarSnackbar('Profesor actualizado exitosamente', 'success');
       } else {
-        const profesoresRef = collection(db, 'profesores');
-        await addDoc(profesoresRef, datosAGuardar);
+        await addDoc(collection(db, 'profesores'), {
+          ...profesorData,
+          fechaCreacion: new Date().toISOString()
+        });
         mostrarSnackbar('Profesor registrado exitosamente', 'success');
       }
-      
       handleClose();
-      fetchProfesores();
+      const materiasData = await fetchMaterias();
+      await fetchProfesores(materiasData);
     } catch (error) {
       console.error('Error:', error);
       mostrarSnackbar('Error al guardar el profesor', 'error');
+    } finally {
+      setLoadingData(false);
     }
   };
 
+
   const handleDelete = async (id) => {
     if (window.confirm('¿Está seguro de eliminar este profesor?')) {
+      setLoadingData(true);
       try {
         await deleteDoc(doc(db, 'profesores', id));
         mostrarSnackbar('Profesor eliminado exitosamente', 'success');
-        fetchProfesores();
+        const materiasData = await fetchMaterias();
+        await fetchProfesores(materiasData);
       } catch (error) {
         console.error('Error:', error);
         mostrarSnackbar('Error al eliminar el profesor', 'error');
+      } finally {
+        setLoadingData(false);
       }
     }
   };
 
-  const materiasDisponibles = [
-    'Música',
-    'Danza',
-    'Teatro',
-    'Artes Plásticas',
-    'Canto',
-    'Piano',
-    'Guitarra',
-    'Violín',
-    'Pintura',
-    'Escultura'
-  ];
+  const handleSaveSelection = (materiasSeleccionadas) => {
+    setFormData(prev => ({
+      ...prev,
+      materias: materiasSeleccionadas
+    }));
+  };
+
+  const getMateriaName = (materiaId) => {
+    const materia = materias.find(m => m.id === materiaId);
+    return materia ? materia.nombre : 'Materia no encontrada';
+  };
+
+  if (loading) {
+    return (
+      <Container>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+          <CircularProgress />
+        </Box>
+      </Container>
+    );
+  }
 
   return (
     <Container>
@@ -202,81 +217,87 @@ const Profesores = () => {
           color="primary"
           startIcon={<AddIcon />}
           onClick={handleClickOpen}
+          disabled={loadingData}
         >
           Nuevo Profesor
         </Button>
       </Box>
 
       <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>CI</TableCell>
-              <TableCell>Nombre Completo</TableCell>
-              <TableCell>Especialidad</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Estado</TableCell>
-              <TableCell>Materias</TableCell>
-              <TableCell align="center">Acciones</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {profesores.map((profesor) => (
-              <TableRow key={profesor.id}>
-                <TableCell>{profesor.ci}</TableCell>
-                <TableCell>{`${profesor.nombre} ${profesor.apellidos}`}</TableCell>
-                <TableCell>{profesor.especialidad}</TableCell>
-                <TableCell>{profesor.email}</TableCell>
-                <TableCell>
-                  <Box
-                    sx={{
-                      backgroundColor: profesor.estado === 'Activo' ? 'success.light' : 'error.light',
-                      color: 'white',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      display: 'inline-block'
-                    }}
-                  >
-                    {profesor.estado}
-                  </Box>
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                    {profesor.materias?.map((materia, index) => (
-                      <Chip
-                        key={index}
-                        label={materia}
-                        size="small"
-                        icon={<SchoolIcon />}
-                        color="primary"
-                        variant="outlined"
-                      />
-                    ))}
-                  </Box>
-                </TableCell>
-                <TableCell align="center">
-                  <IconButton
-                    color="primary"
-                    onClick={() => handleEdit(profesor)}
-                    size="small"
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    color="error"
-                    onClick={() => handleDelete(profesor.id)}
-                    size="small"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </TableCell>
+        {loadingData ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>CI</TableCell>
+                <TableCell>Nombre</TableCell>
+                <TableCell>Especialidad</TableCell>
+                <TableCell>Materias Asignadas</TableCell>
+                <TableCell align="center">Acciones</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {profesores.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} align="center">
+                    No hay profesores registrados
+                  </TableCell>
+                </TableRow>
+              ) : (
+                profesores.map((profesor) => (
+                  <TableRow key={profesor.id}>
+                    <TableCell>{profesor.ci}</TableCell>
+                    <TableCell>{`${profesor.nombre} ${profesor.apellidos}`}</TableCell>
+                    <TableCell>{profesor.especialidad}</TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={1} flexWrap="wrap">
+                        {profesor.materias?.map((materiaId) => (
+                          <Chip
+                            key={materiaId}
+                            label={getMateriaName(materiaId)}
+                            size="small"
+                            icon={<ClassIcon />}
+                            sx={{ m: 0.5 }}
+                          />
+                        ))}
+                      </Stack>
+                    </TableCell>
+                    <TableCell align="center">
+                      <IconButton
+                        color="primary"
+                        onClick={() => handleEdit(profesor)}
+                        size="small"
+                        disabled={loadingData}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        color="error"
+                        onClick={() => handleDelete(profesor.id)}
+                        size="small"
+                        disabled={loadingData}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        )}
       </TableContainer>
 
-      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+      <Dialog 
+        open={open} 
+        onClose={handleClose} 
+        maxWidth="md" 
+        fullWidth
+        disableEscapeKeyDown={loadingData}
+      >
         <DialogTitle>
           {editando ? 'Editar Profesor' : 'Nuevo Profesor'}
         </DialogTitle>
@@ -294,6 +315,7 @@ const Profesores = () => {
                   value={formData.nombre}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                   required
+                  disabled={loadingData}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -306,6 +328,7 @@ const Profesores = () => {
                   value={formData.apellidos}
                   onChange={(e) => setFormData({ ...formData, apellidos: e.target.value })}
                   required
+                  disabled={loadingData}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -318,30 +341,7 @@ const Profesores = () => {
                   value={formData.ci}
                   onChange={(e) => setFormData({ ...formData, ci: e.target.value })}
                   required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  margin="dense"
-                  label="Email"
-                  type="email"
-                  fullWidth
-                  variant="outlined"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  margin="dense"
-                  label="Teléfono"
-                  type="tel"
-                  fullWidth
-                  variant="outlined"
-                  value={formData.telefono}
-                  onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
-                  required
+                  disabled={loadingData}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -354,89 +354,61 @@ const Profesores = () => {
                   value={formData.especialidad}
                   onChange={(e) => setFormData({ ...formData, especialidad: e.target.value })}
                   required
+                  disabled={loadingData}
                 />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  margin="dense"
-                  label="Título Profesional"
-                  type="text"
-                  fullWidth
-                  variant="outlined"
-                  value={formData.titulo}
-                  onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  margin="dense"
-                  label="Fecha de Ingreso"
-                  type="date"
-                  fullWidth
-                  variant="outlined"
-                  value={formData.fechaIngreso}
-                  onChange={(e) => setFormData({ ...formData, fechaIngreso: e.target.value })}
-                  InputLabelProps={{ shrink: true }}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth margin="dense">
-                  <InputLabel>Estado</InputLabel>
-                  <Select
-                    value={formData.estado}
-                    onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-                    label="Estado"
-                    required
-                  >
-                    <MenuItem value="Activo">Activo</MenuItem>
-                    <MenuItem value="Inactivo">Inactivo</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth margin="dense">
-                  <InputLabel>Materias</InputLabel>
-                  <Select
-                    multiple
-                    value={formData.materias}
-                    onChange={(e) => setFormData({ ...formData, materias: e.target.value })}
-                    label="Materias"
-                    required
-                  >
-                    {materiasDisponibles.map((materia) => (
-                      <MenuItem key={materia} value={materia}>
-                        {materia}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
               </Grid>
               <Grid item xs={12}>
-                <TextField
-                  margin="dense"
-                  label="Dirección"
-                  type="text"
-                  fullWidth
-                  variant="outlined"
-                  value={formData.direccion}
-                  onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
-                  multiline
-                  rows={2}
-                  required
-                />
+                <Box sx={{ mb: 2 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<ClassIcon />}
+                    onClick={() => setOpenMateriasModal(true)}
+                    disabled={loadingData}
+                  >
+                    Seleccionar Materias
+                  </Button>
+                </Box>
+                <Stack direction="row" spacing={1} flexWrap="wrap">
+                  {formData.materias.map((materiaId) => (
+                    <Chip
+                      key={materiaId}
+                      label={getMateriaName(materiaId)}
+                      onDelete={() => setFormData(prev => ({
+                        ...prev,
+                        materias: prev.materias.filter(id => id !== materiaId)
+                      }))}
+                      size="small"
+                      disabled={loadingData}
+                    />
+                  ))}
+                </Stack>
               </Grid>
             </Grid>
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleClose}>Cancelar</Button>
-            <Button type="submit" variant="contained" color="primary">
-              {editando ? 'Actualizar' : 'Guardar'}
+            <Button onClick={handleClose} disabled={loadingData}>
+              Cancelar
+            </Button>
+            <Button 
+              type="submit" 
+              variant="contained" 
+              color="primary"
+              disabled={loadingData}
+            >
+              {loadingData ? <CircularProgress size={24} /> : (editando ? 'Actualizar' : 'Guardar')}
             </Button>
           </DialogActions>
         </form>
       </Dialog>
+
+      <SeleccionarMateriasModal
+        open={openMateriasModal}
+        onClose={() => setOpenMateriasModal(false)}
+        materias={materias}
+        materiasSeleccionadas={formData.materias}
+        onSaveSelection={handleSaveSelection}
+        loading={loadingData}
+      />
 
       <Snackbar
         open={snackbar.open}
