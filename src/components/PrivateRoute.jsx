@@ -1,23 +1,26 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { CircularProgress, Box } from '@mui/material';
 
-export default function PrivateRoute({ children }) {
-  const { currentUser } = useAuth();
+const PrivateRoute = ({ children, requiredRole }) => {
+  const { currentUser, userRole } = useAuth();
 
-  if (currentUser === undefined) {
-    return (
-      <Box 
-        display="flex" 
-        justifyContent="center" 
-        alignItems="center" 
-        minHeight="100vh"
-      >
-        <CircularProgress />
-      </Box>
-    );
+  if (!currentUser) {
+    return <Navigate to="/login" />;
   }
 
-  return currentUser ? children : <Navigate to="/login" />;
-}
+  if (requiredRole && userRole !== requiredRole) {
+    // Redirigir a la ruta apropiada según el rol
+    if (userRole === 'admin') {
+      return <Navigate to="/admin/estudiantes" />;
+    } else if (userRole === 'student') {
+      return <Navigate to="/student/dashboard" />;
+    } else {
+      return <Navigate to="/login" />;
+    }
+  }
+
+  return children;
+};
+
+export default PrivateRoute;

@@ -1,62 +1,62 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
-  Grid,
   Paper,
   Typography,
+  Box,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Grid,
+  IconButton,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Button,
-  Box,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  IconButton,
-  Snackbar,
   Alert,
-  CircularProgress,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Select,
+  CircularProgress
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
+import { collection, query, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 const Calificaciones = () => {
   const [calificaciones, setCalificaciones] = useState([]);
   const [estudiantes, setEstudiantes] = useState([]);
   const [materias, setMaterias] = useState([]);
-  const [profesores, setProfesores] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadingData, setLoadingData] = useState(false);
   const [open, setOpen] = useState(false);
-  const [editando, setEditando] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [formData, setFormData] = useState({
+  const [error, setError] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [calificacionData, setCalificacionData] = useState({
     estudiante_id: '',
     materia_id: '',
-    profesor_id: '',
     calificacion: '',
-    fecha: new Date().toISOString().split('T')[0],
     periodo: '',
+    fecha: ''
   });
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
     try {
-      // Cargar estudiantes
+      setLoading(true);
+      // Obtener estudiantes
       const estudiantesSnapshot = await getDocs(collection(db, 'estudiantes'));
       const estudiantesData = estudiantesSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -64,7 +64,7 @@ const Calificaciones = () => {
       }));
       setEstudiantes(estudiantesData);
 
-      // Cargar materias
+      // Obtener materias
       const materiasSnapshot = await getDocs(collection(db, 'materias'));
       const materiasData = materiasSnapshot.docs.map(doc => ({
         id: doc.id,
@@ -72,359 +72,267 @@ const Calificaciones = () => {
       }));
       setMaterias(materiasData);
 
-      // Cargar profesores
-      const profesoresSnapshot = await getDocs(collection(db, 'profesores'));
-      const profesoresData = profesoresSnapshot.docs.map(doc => ({
+      // Obtener calificaciones
+      const calificacionesSnapshot = await getDocs(collection(db, 'calificaciones'));
+      const calificacionesData = calificacionesSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      setProfesores(profesoresData);
-
-      // Cargar calificaciones
-      const calificacionesSnapshot = await getDocs(collection(db, 'calificaciones'));
-      const calificacionesData = await Promise.all(calificacionesSnapshot.docs.map(async doc => {
-        const calificacion = { id: doc.id, ...doc.data() };
-        
-        // Obtener datos relacionados
-        const estudiante = estudiantesData.find(e => e.id === calificacion.estudiante_id) || {};
-        const materia = materiasData.find(m => m.id === calificacion.materia_id) || {};
-        const profesor = profesoresData.find(p => p.id === calificacion.profesor_id) || {};
-
-        return {
-          ...calificacion,
-          estudiante_nombre: `${estudiante.nombre || ''} ${estudiante.apellidos || ''}`,
-          materia_nombre: materia.nombre || '',
-          profesor_nombre: `${profesor.nombre || ''} ${profesor.apellidos || ''}`
-        };
-      }));
-
       setCalificaciones(calificacionesData);
     } catch (error) {
-      console.error('Error al cargar datos:', error);
-      mostrarSnackbar('Error al cargar los datos', 'error');
+      console.error('Error fetching data:', error);
+      setError('Error al cargar los datos');
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const mostrarSnackbar = (mensaje, severidad) => {
-    setSnackbar({ open: true, message: mensaje, severity: severidad });
   };
 
   const handleClickOpen = () => {
-    setEditando(null);
-    setFormData({
+    setEditingId(null);
+    setCalificacionData({
       estudiante_id: '',
       materia_id: '',
-      profesor_id: '',
       calificacion: '',
-      fecha: new Date().toISOString().split('T')[0],
       periodo: '',
+      fecha: new Date().toISOString().split('T')[0]
     });
     setOpen(true);
   };
 
   const handleClose = () => {
     setOpen(false);
-    setEditando(null);
+    setError('');
   };
 
-
-  const handleEdit = (calificacion) => {
-    setEditando(calificacion.id);
-    setFormData({
-      estudiante_id: calificacion.estudiante_id || '',
-      materia_id: calificacion.materia_id || '',
-      profesor_id: calificacion.profesor_id || '',
-      calificacion: calificacion.calificacion || '',
-      fecha: calificacion.fecha || new Date().toISOString().split('T')[0],
-      periodo: calificacion.periodo || '',
-    });
-    setOpen(true);
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setCalificacionData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoadingData(true);
     try {
-      const calificacionData = {
-        estudiante_id: formData.estudiante_id,
-        materia_id: formData.materia_id,
-        profesor_id: formData.profesor_id,
-        calificacion: parseFloat(formData.calificacion),
-        fecha: formData.fecha,
-        periodo: formData.periodo,
-        fechaActualizacion: new Date().toISOString()
+      const calificacionValue = parseFloat(calificacionData.calificacion);
+      if (isNaN(calificacionValue) || calificacionValue < 0 || calificacionValue > 100) {
+        setError('La calificación debe ser un número entre 0 y 100');
+        return;
+      }
+
+      // Obtener datos adicionales
+      const estudiante = estudiantes.find(e => e.id === calificacionData.estudiante_id);
+      const materia = materias.find(m => m.id === calificacionData.materia_id);
+
+      const calificacionToSave = {
+        ...calificacionData,
+        calificacion: calificacionValue,
+        estudiante_nombre: `${estudiante.nombre} ${estudiante.apellidos}`,
+        materia_nombre: materia.nombre,
+        materia_codigo: materia.codigo
       };
 
-      if (editando) {
-        await updateDoc(doc(db, 'calificaciones', editando), calificacionData);
-        mostrarSnackbar('Calificación actualizada exitosamente', 'success');
+      if (editingId) {
+        await updateDoc(doc(db, 'calificaciones', editingId), calificacionToSave);
       } else {
-        await addDoc(collection(db, 'calificaciones'), {
-          ...calificacionData,
-          fechaCreacion: new Date().toISOString()
-        });
-        mostrarSnackbar('Calificación registrada exitosamente', 'success');
+        await addDoc(collection(db, 'calificaciones'), calificacionToSave);
       }
-      handleClose();
+
       await fetchData();
+      handleClose();
     } catch (error) {
-      console.error('Error:', error);
-      mostrarSnackbar('Error al guardar la calificación', 'error');
-    } finally {
-      setLoadingData(false);
+      console.error('Error saving calificacion:', error);
+      setError('Error al guardar la calificación');
     }
+  };
+
+  const handleEdit = (calificacion) => {
+    setEditingId(calificacion.id);
+    setCalificacionData({
+      estudiante_id: calificacion.estudiante_id,
+      materia_id: calificacion.materia_id,
+      calificacion: calificacion.calificacion.toString(),
+      periodo: calificacion.periodo,
+      fecha: calificacion.fecha
+    });
+    setOpen(true);
   };
 
   const handleDelete = async (id) => {
     if (window.confirm('¿Está seguro de eliminar esta calificación?')) {
-      setLoadingData(true);
       try {
         await deleteDoc(doc(db, 'calificaciones', id));
-        mostrarSnackbar('Calificación eliminada exitosamente', 'success');
         await fetchData();
       } catch (error) {
-        console.error('Error:', error);
-        mostrarSnackbar('Error al eliminar la calificación', 'error');
-      } finally {
-        setLoadingData(false);
+        console.error('Error deleting calificacion:', error);
+        setError('Error al eliminar la calificación');
       }
     }
   };
 
   if (loading) {
     return (
-      <Container>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-          <CircularProgress />
-        </Box>
-      </Container>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+        <CircularProgress />
+      </Box>
     );
   }
 
   return (
     <Container>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h4" component="h1">
+      <Box sx={{ py: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
           Gestión de Calificaciones
         </Typography>
+
         <Button
           variant="contained"
-          color="primary"
           startIcon={<AddIcon />}
           onClick={handleClickOpen}
-          disabled={loadingData}
+          sx={{ mb: 4 }}
         >
           Nueva Calificación
         </Button>
-      </Box>
 
-      <TableContainer component={Paper}>
-        {loadingData ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        <TableContainer component={Paper}>
           <Table>
             <TableHead>
               <TableRow>
                 <TableCell>Estudiante</TableCell>
                 <TableCell>Materia</TableCell>
-                <TableCell>Profesor</TableCell>
+                <TableCell>Código</TableCell>
                 <TableCell>Calificación</TableCell>
-                <TableCell>Fecha</TableCell>
                 <TableCell>Periodo</TableCell>
-                <TableCell align="center">Acciones</TableCell>
+                <TableCell>Fecha</TableCell>
+                <TableCell>Acciones</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {calificaciones.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} align="center">
-                    No hay calificaciones registradas
+              {calificaciones.map((calificacion) => (
+                <TableRow key={calificacion.id}>
+                  <TableCell>{calificacion.estudiante_nombre}</TableCell>
+                  <TableCell>{calificacion.materia_nombre}</TableCell>
+                  <TableCell>{calificacion.materia_codigo}</TableCell>
+                  <TableCell>{calificacion.calificacion}</TableCell>
+                  <TableCell>{calificacion.periodo}</TableCell>
+                  <TableCell>{calificacion.fecha}</TableCell>
+                  <TableCell>
+                    <IconButton
+                      color="primary"
+                      onClick={() => handleEdit(calificacion)}
+                      size="small"
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      color="error"
+                      onClick={() => handleDelete(calificacion.id)}
+                      size="small"
+                    >
+                      <DeleteIcon />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
-              ) : (
-                calificaciones.map((calificacion) => (
-                  <TableRow key={calificacion.id}>
-                    <TableCell>{calificacion.estudiante_nombre}</TableCell>
-                    <TableCell>{calificacion.materia_nombre}</TableCell>
-                    <TableCell>{calificacion.profesor_nombre}</TableCell>
-                    <TableCell>{calificacion.calificacion}</TableCell>
-                    <TableCell>{calificacion.fecha}</TableCell>
-                    <TableCell>{calificacion.periodo}</TableCell>
-                    <TableCell align="center">
-                      <IconButton
-                        color="primary"
-                        onClick={() => handleEdit(calificacion)}
-                        size="small"
-                        disabled={loadingData}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        color="error"
-                        onClick={() => handleDelete(calificacion.id)}
-                        size="small"
-                        disabled={loadingData}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
+              ))}
             </TableBody>
           </Table>
-        )}
-      </TableContainer>
+        </TableContainer>
 
-      <Dialog 
-        open={open} 
-        onClose={handleClose} 
-        maxWidth="md" 
-        fullWidth
-        disableEscapeKeyDown={loadingData}
-      >
-        <DialogTitle>
-          {editando ? 'Editar Calificación' : 'Nueva Calificación'}
-        </DialogTitle>
-        <form onSubmit={handleSubmit}>
+        <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+          <DialogTitle>
+            {editingId ? 'Editar Calificación' : 'Nueva Calificación'}
+          </DialogTitle>
           <DialogContent>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth margin="dense">
-                  <InputLabel>Estudiante</InputLabel>
-                  <Select
-                    value={formData.estudiante_id}
-                    label="Estudiante"
-                    onChange={(e) => setFormData({ ...formData, estudiante_id: e.target.value })}
+            <Box component="form" noValidate sx={{ mt: 2 }}>
+              <Grid container spacing={2}>
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Estudiante</InputLabel>
+                    <Select
+                      name="estudiante_id"
+                      value={calificacionData.estudiante_id}
+                      onChange={handleInputChange}
+                      label="Estudiante"
+                      required
+                    >
+                      {estudiantes.map((estudiante) => (
+                        <MenuItem key={estudiante.id} value={estudiante.id}>
+                          {`${estudiante.nombre} ${estudiante.apellidos}`}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Materia</InputLabel>
+                    <Select
+                      name="materia_id"
+                      value={calificacionData.materia_id}
+                      onChange={handleInputChange}
+                      label="Materia"
+                      required
+                    >
+                      {materias.map((materia) => (
+                        <MenuItem key={materia.id} value={materia.id}>
+                          {`${materia.nombre} (${materia.codigo})`}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Calificación"
+                    name="calificacion"
+                    type="number"
+                    value={calificacionData.calificacion}
+                    onChange={handleInputChange}
                     required
-                    disabled={loadingData}
-                  >
-                    {estudiantes.map((estudiante) => (
-                      <MenuItem key={estudiante.id} value={estudiante.id}>
-                        {`${estudiante.nombre} ${estudiante.apellidos}`}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth margin="dense">
-                  <InputLabel>Materia</InputLabel>
-                  <Select
-                    value={formData.materia_id}
-                    label="Materia"
-                    onChange={(e) => setFormData({ ...formData, materia_id: e.target.value })}
+                    inputProps={{ min: 0, max: 100 }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Periodo"
+                    name="periodo"
+                    value={calificacionData.periodo}
+                    onChange={handleInputChange}
                     required
-                    disabled={loadingData}
-                  >
-                    {materias.map((materia) => (
-                      <MenuItem key={materia.id} value={materia.id}>
-                        {materia.nombre}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth margin="dense">
-                  <InputLabel>Profesor</InputLabel>
-                  <Select
-                    value={formData.profesor_id}
-                    label="Profesor"
-                    onChange={(e) => setFormData({ ...formData, profesor_id: e.target.value })}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Fecha"
+                    name="fecha"
+                    type="date"
+                    value={calificacionData.fecha}
+                    onChange={handleInputChange}
                     required
-                    disabled={loadingData}
-                  >
-                    {profesores.map((profesor) => (
-                      <MenuItem key={profesor.id} value={profesor.id}>
-                        {`${profesor.nombre} ${profesor.apellidos}`}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  margin="dense"
-                  label="Calificación"
-                  type="number"
-                  fullWidth
-                  variant="outlined"
-                  value={formData.calificacion}
-                  onChange={(e) => setFormData({ ...formData, calificacion: e.target.value })}
-                  required
-                  inputProps={{ min: "0", max: "100", step: "0.01" }}
-                  disabled={loadingData}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  margin="dense"
-                  label="Fecha"
-                  type="date"
-                  fullWidth
-                  variant="outlined"
-                  value={formData.fecha}
-                  onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                  required
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                  disabled={loadingData}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  margin="dense"
-                  label="Periodo"
-                  type="text"
-                  fullWidth
-                  variant="outlined"
-                  value={formData.periodo}
-                  onChange={(e) => setFormData({ ...formData, periodo: e.target.value })}
-                  required
-                  disabled={loadingData}
-                />
-              </Grid>
-            </Grid>
+            </Box>
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleClose} disabled={loadingData}>
-              Cancelar
-            </Button>
-            <Button 
-              type="submit" 
-              variant="contained" 
-              color="primary"
-              disabled={loadingData}
-            >
-              {loadingData ? <CircularProgress size={24} /> : (editando ? 'Actualizar' : 'Guardar')}
+            <Button onClick={handleClose}>Cancelar</Button>
+            <Button onClick={handleSubmit} variant="contained">
+              {editingId ? 'Actualizar' : 'Guardar'}
             </Button>
           </DialogActions>
-        </form>
-      </Dialog>
-
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={6000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-      >
-        <Alert
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+        </Dialog>
+      </Box>
     </Container>
   );
 };

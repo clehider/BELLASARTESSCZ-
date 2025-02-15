@@ -1,7 +1,11 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { auth } from '../firebase/config';
-import { db } from '../firebase/config';
-import { doc, getDoc } from 'firebase/firestore';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { auth, db } from '../firebase/config';
 
 const AuthContext = createContext();
 
@@ -14,26 +18,74 @@ export function AuthProvider({ children }) {
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const login = async (email, password) => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Buscar en colección de administradores primero
+      const adminsRef = collection(db, 'administradores');
+      const adminQuery = query(adminsRef, where('email', '==', email));
+      const adminSnapshot = await getDocs(adminQuery);
+
+      if (!adminSnapshot.empty) {
+        const adminData = {
+          id: adminSnapshot.docs[0].id,
+          ...adminSnapshot.docs[0].data()
+        };
+        setUserRole('admin');
+        return { role: 'admin', data: adminData };
+      }
+
+      // Si no es admin, buscar en estudiantes
+      const estudiantesRef = collection(db, 'estudiantes');
+      const estudianteQuery = query(estudiantesRef, where('email', '==', email));
+      const estudianteSnapshot = await getDocs(estudianteQuery);
+
+      if (!estudianteSnapshot.empty) {
+        const estudianteData = {
+          id: estudianteSnapshot.docs[0].id,
+          ...estudianteSnapshot.docs[0].data()
+        };
+        setUserRole('student');
+        return { role: 'student', data: estudianteData };
+      }
+
+      throw new Error('Usuario no autorizado');
+    } catch (error) {
+      console.error('Error en login:', error);
+      throw error;
+    }
+  };
+
+  const logout = () => {
+    setUserRole(null);
+    return signOut(auth);
+  };
+
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (user) {
         try {
-          // Obtener el rol del usuario
-          const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
-          if (userDoc.exists()) {
-            console.log('Rol del usuario encontrado:', userDoc.data().rol);
-            setUserRole(userDoc.data().rol);
+          const adminsRef = collection(db, 'administradores');
+          const adminQuery = query(adminsRef, where('email', '==', user.email));
+          const adminSnapshot = await getDocs(adminQuery);
+
+          if (!adminSnapshot.empty) {
+            setUserRole('admin');
           } else {
-            console.log('No se encontró el documento del usuario');
-            setUserRole(null);
+            const estudiantesRef = collection(db, 'estudiantes');
+            const estudianteQuery = query(estudiantesRef, where('email', '==', user.email));
+            const estudianteSnapshot = await getDocs(estudianteQuery);
+
+            if (!estudianteSnapshot.empty) {
+              setUserRole('student');
+            }
           }
         } catch (error) {
-          console.error('Error al obtener el rol:', error);
-          setUserRole(null);
+          console.error('Error al verificar rol:', error);
         }
-      } else {
-        setUserRole(null);
       }
       setLoading(false);
     });
@@ -44,7 +96,8 @@ export function AuthProvider({ children }) {
   const value = {
     currentUser,
     userRole,
-    loading
+    login,
+    logout
   };
 
   return (
@@ -53,3 +106,5 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
+
+export default AuthProvider;

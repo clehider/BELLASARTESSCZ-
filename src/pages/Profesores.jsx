@@ -1,103 +1,77 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
-  Grid,
   Paper,
-  Typography,
+  Button,
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Button,
-  Box,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
   IconButton,
+  Typography,
+  Box,
+  Grid,
+  CircularProgress,
   Snackbar,
   Alert,
-  CircularProgress,
-  Chip,
-  Stack,
+  MenuItem
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon,
-  Class as ClassIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import SeleccionarMateriasModal from '../components/SeleccionarMateriasModal';
 
 const Profesores = () => {
   const [profesores, setProfesores] = useState([]);
-  const [materias, setMaterias] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [editando, setEditando] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [openMateriasModal, setOpenMateriasModal] = useState(false);
-  const [editando, setEditando] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+
   const [formData, setFormData] = useState({
     nombre: '',
     apellidos: '',
     ci: '',
+    telefono: '',
+    email: '',
     especialidad: '',
-    materias: []
+    estado: 'activo'
   });
 
-  const fetchMaterias = useCallback(async () => {
+  const fetchProfesores = async () => {
     try {
-      const materiasSnapshot = await getDocs(collection(db, 'materias'));
-      const materiasData = materiasSnapshot.docs.map(doc => ({
+      const querySnapshot = await getDocs(collection(db, 'profesores'));
+      const profesoresData = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      setMaterias(materiasData);
-      return materiasData;
-    } catch (error) {
-      console.error('Error al cargar materias:', error);
-      mostrarSnackbar('Error al cargar las materias', 'error');
-      return [];
-    }
-  }, []);
-
-  const fetchProfesores = useCallback(async (materiasData) => {
-    setLoadingData(true);
-    try {
-      const profesoresSnapshot = await getDocs(collection(db, 'profesores'));
-      const profesoresData = profesoresSnapshot.docs.map(doc => {
-        const profesor = { id: doc.id, ...doc.data() };
-        // Asignar los datos de las materias
-        if (profesor.materias && profesor.materias.length > 0) {
-          profesor.materiasData = profesor.materias.map(materiaId => 
-            materiasData.find(m => m.id === materiaId)
-          ).filter(Boolean);
-        }
-        return profesor;
-      });
       setProfesores(profesoresData);
     } catch (error) {
-      console.error('Error al cargar profesores:', error);
+      console.error('Error:', error);
       mostrarSnackbar('Error al cargar los profesores', 'error');
     } finally {
-      setLoadingData(false);
       setLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
-    const inicializarDatos = async () => {
-      const materiasData = await fetchMaterias();
-      await fetchProfesores(materiasData);
-    };
-    inicializarDatos();
-  }, [fetchMaterias, fetchProfesores]);
+    fetchProfesores();
+  }, []);
 
   const mostrarSnackbar = (mensaje, severidad) => {
     setSnackbar({ open: true, message: mensaje, severity: severidad });
@@ -109,8 +83,10 @@ const Profesores = () => {
       nombre: '',
       apellidos: '',
       ci: '',
+      telefono: '',
+      email: '',
       especialidad: '',
-      materias: []
+      estado: 'activo'
     });
     setOpen(true);
   };
@@ -122,26 +98,17 @@ const Profesores = () => {
 
   const handleEdit = (profesor) => {
     setEditando(profesor.id);
-    setFormData({
-      nombre: profesor.nombre || '',
-      apellidos: profesor.apellidos || '',
-      ci: profesor.ci || '',
-      especialidad: profesor.especialidad || '',
-      materias: profesor.materias || []
-    });
+    setFormData({ ...profesor });
     setOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoadingData(true);
+
     try {
       const profesorData = {
-        nombre: formData.nombre,
-        apellidos: formData.apellidos,
-        ci: formData.ci,
-        especialidad: formData.especialidad,
-        materias: formData.materias,
+        ...formData,
         fechaActualizacion: new Date().toISOString()
       };
 
@@ -149,15 +116,13 @@ const Profesores = () => {
         await updateDoc(doc(db, 'profesores', editando), profesorData);
         mostrarSnackbar('Profesor actualizado exitosamente', 'success');
       } else {
-        await addDoc(collection(db, 'profesores'), {
-          ...profesorData,
-          fechaCreacion: new Date().toISOString()
-        });
+        profesorData.fechaCreacion = new Date().toISOString();
+        await addDoc(collection(db, 'profesores'), profesorData);
         mostrarSnackbar('Profesor registrado exitosamente', 'success');
       }
+
       handleClose();
-      const materiasData = await fetchMaterias();
-      await fetchProfesores(materiasData);
+      await fetchProfesores();
     } catch (error) {
       console.error('Error:', error);
       mostrarSnackbar('Error al guardar el profesor', 'error');
@@ -166,15 +131,13 @@ const Profesores = () => {
     }
   };
 
-
   const handleDelete = async (id) => {
     if (window.confirm('¿Está seguro de eliminar este profesor?')) {
       setLoadingData(true);
       try {
         await deleteDoc(doc(db, 'profesores', id));
         mostrarSnackbar('Profesor eliminado exitosamente', 'success');
-        const materiasData = await fetchMaterias();
-        await fetchProfesores(materiasData);
+        await fetchProfesores();
       } catch (error) {
         console.error('Error:', error);
         mostrarSnackbar('Error al eliminar el profesor', 'error');
@@ -184,25 +147,11 @@ const Profesores = () => {
     }
   };
 
-  const handleSaveSelection = (materiasSeleccionadas) => {
-    setFormData(prev => ({
-      ...prev,
-      materias: materiasSeleccionadas
-    }));
-  };
-
-  const getMateriaName = (materiaId) => {
-    const materia = materias.find(m => m.id === materiaId);
-    return materia ? materia.nombre : 'Materia no encontrada';
-  };
-
   if (loading) {
     return (
-      <Container>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-          <CircularProgress />
-        </Box>
-      </Container>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+        <CircularProgress />
+      </Box>
     );
   }
 
@@ -224,79 +173,62 @@ const Profesores = () => {
       </Box>
 
       <TableContainer component={Paper}>
-        {loadingData ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <Table>
-            <TableHead>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>CI</TableCell>
+              <TableCell>Nombre</TableCell>
+              <TableCell>Apellidos</TableCell>
+              <TableCell>Email</TableCell>
+              <TableCell>Especialidad</TableCell>
+              <TableCell>Estado</TableCell>
+              <TableCell align="center">Acciones</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {profesores.length === 0 ? (
               <TableRow>
-                <TableCell>CI</TableCell>
-                <TableCell>Nombre</TableCell>
-                <TableCell>Especialidad</TableCell>
-                <TableCell>Materias Asignadas</TableCell>
-                <TableCell align="center">Acciones</TableCell>
+                <TableCell colSpan={7} align="center">
+                  No hay profesores registrados
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {profesores.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} align="center">
-                    No hay profesores registrados
+            ) : (
+              profesores.map((profesor) => (
+                <TableRow key={profesor.id}>
+                  <TableCell>{profesor.ci}</TableCell>
+                  <TableCell>{profesor.nombre}</TableCell>
+                  <TableCell>{profesor.apellidos}</TableCell>
+                  <TableCell>{profesor.email}</TableCell>
+                  <TableCell>{profesor.especialidad}</TableCell>
+                  <TableCell>{profesor.estado}</TableCell>
+                  <TableCell align="center">
+                    <IconButton
+                      color="primary"
+                      onClick={() => handleEdit(profesor)}
+                      disabled={loadingData}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      color="error"
+                      onClick={() => handleDelete(profesor.id)}
+                      disabled={loadingData}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
-              ) : (
-                profesores.map((profesor) => (
-                  <TableRow key={profesor.id}>
-                    <TableCell>{profesor.ci}</TableCell>
-                    <TableCell>{`${profesor.nombre} ${profesor.apellidos}`}</TableCell>
-                    <TableCell>{profesor.especialidad}</TableCell>
-                    <TableCell>
-                      <Stack direction="row" spacing={1} flexWrap="wrap">
-                        {profesor.materias?.map((materiaId) => (
-                          <Chip
-                            key={materiaId}
-                            label={getMateriaName(materiaId)}
-                            size="small"
-                            icon={<ClassIcon />}
-                            sx={{ m: 0.5 }}
-                          />
-                        ))}
-                      </Stack>
-                    </TableCell>
-                    <TableCell align="center">
-                      <IconButton
-                        color="primary"
-                        onClick={() => handleEdit(profesor)}
-                        size="small"
-                        disabled={loadingData}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        color="error"
-                        onClick={() => handleDelete(profesor.id)}
-                        size="small"
-                        disabled={loadingData}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        )}
+              ))
+            )}
+          </TableBody>
+        </Table>
       </TableContainer>
 
       <Dialog 
         open={open} 
-        onClose={handleClose} 
-        maxWidth="md" 
+        onClose={handleClose}
+        maxWidth="md"
         fullWidth
-        disableEscapeKeyDown={loadingData}
       >
         <DialogTitle>
           {editando ? 'Editar Profesor' : 'Nuevo Profesor'}
@@ -347,6 +279,31 @@ const Profesores = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   margin="dense"
+                  label="Email"
+                  type="email"
+                  fullWidth
+                  variant="outlined"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  required
+                  disabled={loadingData}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  margin="dense"
+                  label="Teléfono"
+                  type="text"
+                  fullWidth
+                  variant="outlined"
+                  value={formData.telefono}
+                  onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
+                  disabled={loadingData}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  margin="dense"
                   label="Especialidad"
                   type="text"
                   fullWidth
@@ -357,31 +314,21 @@ const Profesores = () => {
                   disabled={loadingData}
                 />
               </Grid>
-              <Grid item xs={12}>
-                <Box sx={{ mb: 2 }}>
-                  <Button
-                    variant="outlined"
-                    startIcon={<ClassIcon />}
-                    onClick={() => setOpenMateriasModal(true)}
-                    disabled={loadingData}
-                  >
-                    Seleccionar Materias
-                  </Button>
-                </Box>
-                <Stack direction="row" spacing={1} flexWrap="wrap">
-                  {formData.materias.map((materiaId) => (
-                    <Chip
-                      key={materiaId}
-                      label={getMateriaName(materiaId)}
-                      onDelete={() => setFormData(prev => ({
-                        ...prev,
-                        materias: prev.materias.filter(id => id !== materiaId)
-                      }))}
-                      size="small"
-                      disabled={loadingData}
-                    />
-                  ))}
-                </Stack>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  margin="dense"
+                  label="Estado"
+                  select
+                  fullWidth
+                  variant="outlined"
+                  value={formData.estado}
+                  onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
+                  required
+                  disabled={loadingData}
+                >
+                  <MenuItem value="activo">Activo</MenuItem>
+                  <MenuItem value="inactivo">Inactivo</MenuItem>
+                </TextField>
               </Grid>
             </Grid>
           </DialogContent>
@@ -400,15 +347,6 @@ const Profesores = () => {
           </DialogActions>
         </form>
       </Dialog>
-
-      <SeleccionarMateriasModal
-        open={openMateriasModal}
-        onClose={() => setOpenMateriasModal(false)}
-        materias={materias}
-        materiasSeleccionadas={formData.materias}
-        onSaveSelection={handleSaveSelection}
-        loading={loadingData}
-      />
 
       <Snackbar
         open={snackbar.open}

@@ -20,6 +20,7 @@
     "@nivo/core": "^0.84.0",
     "@nivo/line": "^0.84.0",
     "@nivo/pie": "^0.84.0",
+    "@react-pdf/renderer": "^4.2.1",
     "date-fns": "2.30.0",
     "date-fns-tz": "2.0.0",
     "firebase": "^10.7.1",

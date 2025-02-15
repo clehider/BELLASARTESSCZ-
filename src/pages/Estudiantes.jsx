@@ -1,68 +1,73 @@
-import { Grid } from "@mui/material";
 import React, { useState, useEffect } from 'react';
 import {
   Container,
   Paper,
-  Typography,
+  Button,
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Button,
-  Box,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
   IconButton,
+  Typography,
+  Box,
+  Grid,
+  CircularProgress,
   Snackbar,
-  Alert,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel
+  Alert
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Email as EmailIcon,
-  Phone as PhoneIcon
+  Key as KeyIcon
 } from '@mui/icons-material';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { db } from '../firebase/config';
 
 const Estudiantes = () => {
   const [estudiantes, setEstudiantes] = useState([]);
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(null);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [loading, setLoading] = useState(true);
+  const [loadingData, setLoadingData] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+
   const [formData, setFormData] = useState({
     nombre: '',
-    apellido: '',
+    apellidos: '',
     ci: '',
     email: '',
+    password: '',
     telefono: '',
     direccion: '',
-    fechaNacimiento: '',
-    genero: '',
-    estado: 'Activo'
+    fecha_nacimiento: ''
   });
 
   const fetchEstudiantes = async () => {
     try {
-      const estudiantesSnapshot = await getDocs(collection(db, 'estudiantes'));
-      const estudiantesData = estudiantesSnapshot.docs.map(doc => ({
+      const querySnapshot = await getDocs(collection(db, 'estudiantes'));
+      const estudiantesData = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       setEstudiantes(estudiantesData);
     } catch (error) {
-      console.error('Error al cargar estudiantes:', error);
+      console.error('Error:', error);
       mostrarSnackbar('Error al cargar los estudiantes', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -70,18 +75,21 @@ const Estudiantes = () => {
     fetchEstudiantes();
   }, []);
 
+  const mostrarSnackbar = (mensaje, severidad) => {
+    setSnackbar({ open: true, message: mensaje, severity: severidad });
+  };
+
   const handleClickOpen = () => {
     setEditando(null);
     setFormData({
       nombre: '',
-      apellido: '',
+      apellidos: '',
       ci: '',
       email: '',
+      password: '',
       telefono: '',
       direccion: '',
-      fechaNacimiento: '',
-      genero: '',
-      estado: 'Activo'
+      fecha_nacimiento: ''
     });
     setOpen(true);
   };
@@ -94,79 +102,118 @@ const Estudiantes = () => {
   const handleEdit = (estudiante) => {
     setEditando(estudiante.id);
     setFormData({
-      nombre: estudiante.nombre || '',
-      apellido: estudiante.apellido || '',
-      ci: estudiante.ci || '',
-      email: estudiante.email || '',
-      telefono: estudiante.telefono || '',
-      direccion: estudiante.direccion || '',
-      fechaNacimiento: estudiante.fechaNacimiento || '',
-      genero: estudiante.genero || '',
-      estado: estudiante.estado || 'Activo'
+      ...estudiante,
+      password: '' // La contraseña no se carga por seguridad
     });
     setOpen(true);
   };
 
-  const mostrarSnackbar = (mensaje, severidad) => {
-    setSnackbar({ open: true, message: mensaje, severity: severidad });
-  };
-
-  const validarFormulario = () => {
-    if (!formData.email.includes('@')) {
-      mostrarSnackbar('El email no es válido', 'error');
-      return false;
-    }
-    if (formData.ci.length < 5) {
-      mostrarSnackbar('El CI debe tener al menos 5 caracteres', 'error');
-      return false;
-    }
-    return true;
+  const validateEmail = (email) => {
+    const re = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+    return re.test(email);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validarFormulario()) return;
+    setLoadingData(true);
 
     try {
+      if (!validateEmail(formData.email)) {
+        throw new Error('Email inválido');
+      }
+
+      const estudianteData = {
+        nombre: formData.nombre,
+        apellidos: formData.apellidos,
+        ci: formData.ci,
+        email: formData.email,
+        telefono: formData.telefono,
+        direccion: formData.direccion,
+        fecha_nacimiento: formData.fecha_nacimiento,
+        fechaActualizacion: new Date().toISOString()
+      };
+
       if (editando) {
-        await updateDoc(doc(db, 'estudiantes', editando), formData);
+        await updateDoc(doc(db, 'estudiantes', editando), estudianteData);
         mostrarSnackbar('Estudiante actualizado exitosamente', 'success');
       } else {
-        await addDoc(collection(db, 'estudiantes'), formData);
-        mostrarSnackbar('Estudiante creado exitosamente', 'success');
+        // Verificar si el email ya existe
+        const emailQuery = query(collection(db, 'estudiantes'), where('email', '==', formData.email));
+        const emailSnapshot = await getDocs(emailQuery);
+        
+        if (!emailSnapshot.empty) {
+          throw new Error('El email ya está registrado');
+        }
+
+        if (!formData.password || formData.password.length < 6) {
+          throw new Error('La contraseña debe tener al menos 6 caracteres');
+        }
+
+        // Crear usuario en Authentication
+        const auth = getAuth();
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          formData.email,
+          formData.password
+        );
+
+        // Agregar estudiante a Firestore
+        estudianteData.fechaCreacion = new Date().toISOString();
+        estudianteData.uid = userCredential.user.uid;
+        
+        await addDoc(collection(db, 'estudiantes'), estudianteData);
+        mostrarSnackbar('Estudiante registrado exitosamente', 'success');
       }
+
       handleClose();
-      fetchEstudiantes();
+      await fetchEstudiantes();
     } catch (error) {
       console.error('Error:', error);
-      mostrarSnackbar('Error al guardar el estudiante', 'error');
+      mostrarSnackbar(
+        error.message || 'Error al guardar el estudiante',
+        'error'
+      );
+    } finally {
+      setLoadingData(false);
     }
   };
 
   const handleDelete = async (id) => {
     if (window.confirm('¿Está seguro de eliminar este estudiante?')) {
+      setLoadingData(true);
       try {
         await deleteDoc(doc(db, 'estudiantes', id));
         mostrarSnackbar('Estudiante eliminado exitosamente', 'success');
-        fetchEstudiantes();
+        await fetchEstudiantes();
       } catch (error) {
         console.error('Error:', error);
         mostrarSnackbar('Error al eliminar el estudiante', 'error');
+      } finally {
+        setLoadingData(false);
       }
     }
   };
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Container>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="h4" component="h1">
-          Estudiantes
+          Gestión de Estudiantes
         </Typography>
         <Button
           variant="contained"
           color="primary"
           startIcon={<AddIcon />}
           onClick={handleClickOpen}
+          disabled={loadingData}
         >
           Nuevo Estudiante
         </Button>
@@ -177,57 +224,60 @@ const Estudiantes = () => {
           <TableHead>
             <TableRow>
               <TableCell>CI</TableCell>
-              <TableCell>Nombre Completo</TableCell>
+              <TableCell>Nombre</TableCell>
+              <TableCell>Apellidos</TableCell>
               <TableCell>Email</TableCell>
               <TableCell>Teléfono</TableCell>
-              <TableCell>Estado</TableCell>
               <TableCell align="center">Acciones</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {estudiantes.map((estudiante) => (
-              <TableRow key={estudiante.id}>
-                <TableCell>{estudiante.ci}</TableCell>
-                <TableCell>{`${estudiante.nombre} ${estudiante.apellido}`}</TableCell>
-                <TableCell>{estudiante.email}</TableCell>
-                <TableCell>{estudiante.telefono}</TableCell>
-                <TableCell>
-                  <Box
-                    sx={{
-                      backgroundColor: estudiante.estado === 'Activo' ? 'success.light' : 'error.light',
-                      color: 'white',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      display: 'inline-block'
-                    }}
-                  >
-                    {estudiante.estado}
-                  </Box>
-                </TableCell>
-                <TableCell align="center">
-                  <IconButton
-                    color="primary"
-                    onClick={() => handleEdit(estudiante)}
-                    size="small"
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    color="error"
-                    onClick={() => handleDelete(estudiante.id)}
-                    size="small"
-                  >
-                    <DeleteIcon />
-                  </IconButton>
+            {estudiantes.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  No hay estudiantes registrados
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              estudiantes.map((estudiante) => (
+                <TableRow key={estudiante.id}>
+                  <TableCell>{estudiante.ci}</TableCell>
+                  <TableCell>{estudiante.nombre}</TableCell>
+                  <TableCell>{estudiante.apellidos}</TableCell>
+                  <TableCell>{estudiante.email}</TableCell>
+                  <TableCell>{estudiante.telefono}</TableCell>
+                  <TableCell align="center">
+                    <IconButton
+                      color="primary"
+                      onClick={() => handleEdit(estudiante)}
+                      disabled={loadingData}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      color="error"
+                      onClick={() => handleDelete(estudiante.id)}
+                      disabled={loadingData}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </TableContainer>
 
-      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-        <DialogTitle>{editando ? 'Editar Estudiante' : 'Nuevo Estudiante'}</DialogTitle>
+      <Dialog 
+        open={open} 
+        onClose={handleClose}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {editando ? 'Editar Estudiante' : 'Nuevo Estudiante'}
+        </DialogTitle>
         <form onSubmit={handleSubmit}>
           <DialogContent>
             <Grid container spacing={2}>
@@ -242,18 +292,20 @@ const Estudiantes = () => {
                   value={formData.nombre}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                   required
+                  disabled={loadingData}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   margin="dense"
-                  label="Apellido"
+                  label="Apellidos"
                   type="text"
                   fullWidth
                   variant="outlined"
-                  value={formData.apellido}
-                  onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
+                  value={formData.apellidos}
+                  onChange={(e) => setFormData({ ...formData, apellidos: e.target.value })}
                   required
+                  disabled={loadingData}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -266,6 +318,7 @@ const Estudiantes = () => {
                   value={formData.ci}
                   onChange={(e) => setFormData({ ...formData, ci: e.target.value })}
                   required
+                  disabled={loadingData}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -278,61 +331,37 @@ const Estudiantes = () => {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
+                  disabled={loadingData || editando}
+                  helperText={editando ? "El email no se puede modificar" : ""}
                 />
               </Grid>
+              {!editando && (
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    margin="dense"
+                    label="Contraseña"
+                    type="password"
+                    fullWidth
+                    variant="outlined"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    required={!editando}
+                    disabled={loadingData}
+                    helperText="Mínimo 6 caracteres"
+                  />
+                </Grid>
+              )}
               <Grid item xs={12} sm={6}>
                 <TextField
                   margin="dense"
                   label="Teléfono"
-                  type="tel"
+                  type="text"
                   fullWidth
                   variant="outlined"
                   value={formData.telefono}
                   onChange={(e) => setFormData({ ...formData, telefono: e.target.value })}
-                  required
+                  disabled={loadingData}
                 />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  margin="dense"
-                  label="Fecha de Nacimiento"
-                  type="date"
-                  fullWidth
-                  variant="outlined"
-                  value={formData.fechaNacimiento}
-                  onChange={(e) => setFormData({ ...formData, fechaNacimiento: e.target.value })}
-                  InputLabelProps={{ shrink: true }}
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth margin="dense">
-                  <InputLabel>Género</InputLabel>
-                  <Select
-                    value={formData.genero}
-                    onChange={(e) => setFormData({ ...formData, genero: e.target.value })}
-                    label="Género"
-                    required
-                  >
-                    <MenuItem value="Masculino">Masculino</MenuItem>
-                    <MenuItem value="Femenino">Femenino</MenuItem>
-                    <MenuItem value="Otro">Otro</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth margin="dense">
-                  <InputLabel>Estado</InputLabel>
-                  <Select
-                    value={formData.estado}
-                    onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-                    label="Estado"
-                    required
-                  >
-                    <MenuItem value="Activo">Activo</MenuItem>
-                    <MenuItem value="Inactivo">Inactivo</MenuItem>
-                  </Select>
-                </FormControl>
               </Grid>
               <Grid item xs={12}>
                 <TextField
@@ -343,17 +372,37 @@ const Estudiantes = () => {
                   variant="outlined"
                   value={formData.direccion}
                   onChange={(e) => setFormData({ ...formData, direccion: e.target.value })}
-                  multiline
-                  rows={2}
-                  required
+                  disabled={loadingData}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  margin="dense"
+                  label="Fecha de Nacimiento"
+                  type="date"
+                  fullWidth
+                  variant="outlined"
+                  value={formData.fecha_nacimiento}
+                  onChange={(e) => setFormData({ ...formData, fecha_nacimiento: e.target.value })}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  disabled={loadingData}
                 />
               </Grid>
             </Grid>
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleClose}>Cancelar</Button>
-            <Button type="submit" variant="contained" color="primary">
-              {editando ? 'Actualizar' : 'Crear'}
+            <Button onClick={handleClose} disabled={loadingData}>
+              Cancelar
+            </Button>
+            <Button 
+              type="submit" 
+              variant="contained" 
+              color="primary"
+              disabled={loadingData}
+            >
+              {loadingData ? <CircularProgress size={24} /> : (editando ? 'Actualizar' : 'Guardar')}
             </Button>
           </DialogActions>
         </form>

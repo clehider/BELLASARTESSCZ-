@@ -1,79 +1,45 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Funciones auxiliares
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isAdmin() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
-    }
-    
-    function isProfesor() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/profesores/$(request.auth.uid));
-    }
-    
-    function isEstudiante() {
-      return isAuthenticated() && 
-        exists(/databases/$(database)/documents/estudiantes/$(request.auth.uid));
-    }
-    
-    function isValidDate() {
-      return request.resource.data.createdAt is timestamp &&
-             request.resource.data.updatedAt is timestamp;
+    // Permitir operaciones de inicialización del administrador
+    match /administradores/{adminId} {
+      allow read, write: if true; // Temporalmente permitimos acceso total para la inicialización
     }
 
-    // Reglas para cada colección
-    match /estudiantes/{estudianteId} {
-      allow read: if isAuthenticated();
-      allow create: if isAdmin() && isValidDate();
-      allow update: if (isAdmin() || request.auth.uid == estudianteId) && isValidDate();
-      allow delete: if isAdmin();
-      
-      match /notas/{notaId} {
-        allow read: if isAuthenticated() && 
-          (isAdmin() || request.auth.uid == estudianteId || isProfesor());
-        allow write: if (isAdmin() || isProfesor()) && isValidDate();
-      }
-      
-      match /ausencias/{ausenciaId} {
-        allow read: if isAuthenticated() && 
-          (isAdmin() || request.auth.uid == estudianteId || isProfesor());
-        allow create: if (isAuthenticated() && request.auth.uid == estudianteId) || isAdmin();
-        allow update: if isAdmin() || isProfesor();
-      }
+    // Reglas para la colección de estudiantes
+    match /estudiantes/{studentId} {
+      allow read: if request.auth != null && (
+        // El administrador puede leer todos los documentos
+        exists(/databases/$(database)/documents/administradores/{adminDoc}) &&
+        get(/databases/$(database)/documents/administradores/{adminDoc}).data.email == request.auth.token.email ||
+        // El estudiante puede leer su propio documento
+        resource.data.email == request.auth.token.email
+      );
+      allow write: if request.auth != null && 
+        exists(/databases/$(database)/documents/administradores/{adminDoc}) &&
+        get(/databases/$(database)/documents/administradores/{adminDoc}).data.email == request.auth.token.email;
     }
-    
-    match /profesores/{profesorId} {
-      allow read: if isAuthenticated();
-      allow create: if isAdmin() && isValidDate();
-      allow update: if (isAdmin() || request.auth.uid == profesorId) && isValidDate();
-      allow delete: if isAdmin();
-      
-      match /materias/{materiaId} {
-        allow read: if isAuthenticated();
-        allow write: if (isAdmin() || request.auth.uid == profesorId) && isValidDate();
-      }
-    }
-    
-    match /modulos/{moduloId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() && isValidDate();
-    }
-    
+
+    // Reglas para materias
     match /materias/{materiaId} {
-      allow read: if isAuthenticated();
-      allow create, update: if (isAdmin() || isProfesor()) && isValidDate();
-      allow delete: if isAdmin();
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && 
+        exists(/databases/$(database)/documents/administradores/{adminDoc}) &&
+        get(/databases/$(database)/documents/administradores/{adminDoc}).data.email == request.auth.token.email;
     }
-    
-    match /notas/{notaId} {
-      allow read: if isAuthenticated();
-      allow create, update: if (isAdmin() || isProfesor()) && isValidDate();
-      allow delete: if isAdmin();
+
+    // Reglas para calificaciones
+    match /calificaciones/{calificacionId} {
+      allow read: if request.auth != null && (
+        // El administrador puede leer todas las calificaciones
+        exists(/databases/$(database)/documents/administradores/{adminDoc}) &&
+        get(/databases/$(database)/documents/administradores/{adminDoc}).data.email == request.auth.token.email ||
+        // El estudiante puede leer sus propias calificaciones
+        resource.data.estudiante_email == request.auth.token.email
+      );
+      allow write: if request.auth != null && 
+        exists(/databases/$(database)/documents/administradores/{adminDoc}) &&
+        get(/databases/$(database)/documents/administradores/{adminDoc}).data.email == request.auth.token.email;
     }
   }
 }

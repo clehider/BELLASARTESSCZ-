@@ -1,84 +1,68 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import PrivateRoute from './components/PrivateRoute';
+import React from 'react';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
+import AdminLayout from './layouts/AdminLayout';
+import StudentLayout from './layouts/StudentLayout';
 import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import Materias from './pages/Materias';
 import Estudiantes from './pages/Estudiantes';
 import Profesores from './pages/Profesores';
+import Materias from './pages/Materias';
 import Calificaciones from './pages/Calificaciones';
-import NavBar from './components/NavBar';
-import { setupUsers } from './utils/setupUsers';
-import { setupModules } from './utils/setupModules';
+import StudentDashboard from './pages/student/StudentDashboard';
+import StudentMaterias from './pages/student/StudentMaterias';
+import { AuthProvider } from './contexts/AuthContext';
+import PrivateRoute from './components/PrivateRoute';
+
+const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <Navigate to="/login" replace />
+  },
+  {
+    path: '/login',
+    element: <Login />
+  },
+  {
+    path: '/admin',
+    element: <PrivateRoute requiredRole="admin"><AdminLayout /></PrivateRoute>,
+    children: [
+      {
+        path: 'estudiantes',
+        element: <Estudiantes />
+      },
+      {
+        path: 'profesores',
+        element: <Profesores />
+      },
+      {
+        path: 'materias',
+        element: <Materias />
+      },
+      {
+        path: 'calificaciones',
+        element: <Calificaciones />
+      }
+    ]
+  },
+  {
+    path: '/student',
+    element: <PrivateRoute requiredRole="student"><StudentLayout /></PrivateRoute>,
+    children: [
+      {
+        path: 'dashboard',
+        element: <StudentDashboard />
+      },
+      {
+        path: 'materias',
+        element: <StudentMaterias />
+      }
+    ]
+  }
+]);
 
 function App() {
-  useEffect(() => {
-    // Configurar usuarios y módulos al iniciar la app
-    setupUsers();
-    setupModules();
-  }, []);
-
   return (
     <AuthProvider>
-      <Router>
-        <div style={{ display: 'flex' }}>
-          <NavBar />
-          <main style={{ flexGrow: 1, marginTop: '64px', padding: '20px' }}>
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route
-                path="/"
-                element={
-                  <PrivateRoute>
-                    <Dashboard />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  <PrivateRoute>
-                    <Dashboard />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/materias"
-                element={
-                  <PrivateRoute>
-                    <Materias />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/estudiantes"
-                element={
-                  <PrivateRoute>
-                    <Estudiantes />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/profesores"
-                element={
-                  <PrivateRoute>
-                    <Profesores />
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/calificaciones"
-                element={
-                  <PrivateRoute>
-                    <Calificaciones />
-                  </PrivateRoute>
-                }
-              />
-            </Routes>
-          </main>
-        </div>
-      </Router>
+      <RouterProvider router={router} />
     </AuthProvider>
   );
 }
