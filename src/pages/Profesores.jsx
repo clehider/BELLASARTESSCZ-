@@ -33,13 +33,15 @@ import {
   School as SchoolIcon
 } from '@mui/icons-material';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { db, auth } from '../firebase/config';
+import { useAuth } from '../contexts/AuthContext';
 
 const Profesores = () => {
   const [profesores, setProfesores] = useState([]);
   const [open, setOpen] = useState(false);
   const [editando, setEditando] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const { currentUser } = useAuth();
   const [formData, setFormData] = useState({
     nombre: '',
     apellidos: '',
@@ -54,6 +56,20 @@ const Profesores = () => {
     direccion: ''
   });
 
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged(user => {
+      if (user) {
+        console.log('Usuario autenticado:', user.uid);
+        fetchProfesores();
+      } else {
+        console.log('No hay usuario autenticado');
+        mostrarSnackbar('Por favor, inicia sesión para continuar', 'warning');
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const fetchProfesores = async () => {
     try {
       const profesoresSnapshot = await getDocs(collection(db, 'profesores'));
@@ -67,10 +83,6 @@ const Profesores = () => {
       mostrarSnackbar('Error al cargar los profesores', 'error');
     }
   };
-
-  useEffect(() => {
-    fetchProfesores();
-  }, []);
 
   const handleClickOpen = () => {
     setEditando(null);
@@ -120,13 +132,31 @@ const Profesores = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      if (!auth.currentUser) {
+        console.error('No hay usuario autenticado');
+        mostrarSnackbar('Por favor, inicia sesión nuevamente', 'error');
+        return;
+      }
+
+      console.log('Usuario actual:', auth.currentUser.uid);
+      
+      const datosAGuardar = {
+        ...formData,
+        fechaCreacion: new Date().toISOString(),
+        creadoPor: auth.currentUser.uid,
+        ultimaActualizacion: new Date().toISOString()
+      };
+
       if (editando) {
-        await updateDoc(doc(db, 'profesores', editando), formData);
+        const profesorRef = doc(db, 'profesores', editando);
+        await updateDoc(profesorRef, datosAGuardar);
         mostrarSnackbar('Profesor actualizado exitosamente', 'success');
       } else {
-        await addDoc(collection(db, 'profesores'), formData);
+        const profesoresRef = collection(db, 'profesores');
+        await addDoc(profesoresRef, datosAGuardar);
         mostrarSnackbar('Profesor registrado exitosamente', 'success');
       }
+      
       handleClose();
       fetchProfesores();
     } catch (error) {
